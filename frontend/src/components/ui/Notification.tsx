@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { 
   CheckCircle, 
   AlertTriangle, 
@@ -78,7 +78,7 @@ const Notification: React.FC<NotificationProps> = ({
   };
   
   // Animation variants
-  const notificationVariants = {
+  const notificationVariants: Variants = {
     hidden: { 
       opacity: 0,
       y: -20,
@@ -89,7 +89,7 @@ const Notification: React.FC<NotificationProps> = ({
       y: 0,
       scale: 1,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 300,
         damping: 20
       }
@@ -105,13 +105,13 @@ const Notification: React.FC<NotificationProps> = ({
   };
   
   // Progress bar animation
-  const progressVariants = {
+  const progressVariants: Variants = {
     initial: { width: "0%" },
     animate: { 
       width: "100%",
       transition: { 
         duration: duration / 1000,
-        ease: "linear"
+        ease: "linear" as const
       }
     }
   };

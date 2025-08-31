@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { cn } from '../../utils/cn';
 
 interface CardProps {
@@ -64,7 +64,7 @@ const CardBase: React.FC<CardProps> = ({
   const handleMouseLeave = () => setIsHovered(false);
   
   // Animation variants
-  const cardVariants = {
+  const cardVariants: Variants = {
     initial: { 
       opacity: 0,
       y: 20
@@ -73,7 +73,7 @@ const CardBase: React.FC<CardProps> = ({
       opacity: 1,
       y: 0,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 300,
         damping: 30,
         mass: 1

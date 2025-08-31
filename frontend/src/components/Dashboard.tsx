@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { 
   Shield, 
@@ -11,10 +11,16 @@ import {
   BarChart3,
   Download,
   Eye,
-  Zap
+  Zap,
+  Lock,
+  FileWarning,
+  Layers,
+  ArrowRight
 } from 'lucide-react'
 import { useQuery } from 'react-query'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useInView } from 'react-intersection-observer'
+
 import { 
   getRepositories, 
   getScanSessions, 
@@ -30,47 +36,31 @@ import {
 } from '../types'
 import { useAuth } from '../hooks/useAuth'
 
+// Import new UI components
+import AnimatedCard from './ui/AnimatedCard'
+import AnimatedContainer from './ui/AnimatedContainer'
+import AnimatedIcon from './ui/AnimatedIcon'
+import GlowingBadge from './ui/GlowingBadge'
+
 const Dashboard: React.FC = () => {
   const [selectedTimeRange, setSelectedTimeRange] = useState<'7d' | '30d' | '90d'>('30d')
   const { user } = useAuth()
-
-  // Debug user context
-  useEffect(() => {
-    console.log('=== DASHBOARD USER CONTEXT ===')
-    console.log('Current user:', user)
-    console.log('User ID:', user?.id)
-    console.log('GitHub ID:', user?.github_id)
-  }, [user])
-
+  
   // Fetch data
-  const { data: repositories = [], isLoading: reposLoading, error: reposError } = useQuery(
+  const { data: repositories = [], isLoading: reposLoading } = useQuery(
     'repositories',
     getRepositories
   )
 
-  const { data: scanSessions = [], isLoading: scansLoading, error: scansError } = useQuery(
+  const { data: scanSessions = [], isLoading: scansLoading } = useQuery(
     'scanSessions',
-    () => getScanSessions() // Ensure no parameters are passed
+    () => getScanSessions()
   )
 
-  const { data: vulnerabilities = [], isLoading: vulnsLoading, error: vulnsError } = useQuery(
+  const { data: vulnerabilities = [], isLoading: vulnsLoading } = useQuery(
     'vulnerabilities',
     () => getVulnerabilities()
   )
-
-  // Debug logging
-  useEffect(() => {
-    console.log('=== DASHBOARD DATA DEBUG ===')
-    console.log('Repositories:', repositories)
-    console.log('Repositories error:', reposError)
-    console.log('Scan sessions:', scanSessions)
-    console.log('Scan sessions error:', scansError)
-    console.log('Vulnerabilities:', vulnerabilities)
-    console.log('Vulnerabilities error:', vulnsError)
-    console.log('Repositories loading:', reposLoading)
-    console.log('Scans loading:', scansLoading)
-    console.log('Vulns loading:', vulnsLoading)
-  }, [repositories, scanSessions, vulnerabilities, reposError, scansError, vulnsError, reposLoading, scansLoading, vulnsLoading])
 
   // Calculate security metrics
   const securityMetrics = calculateSecurityMetrics(scanSessions, vulnerabilities)
@@ -87,139 +77,256 @@ const Dashboard: React.FC = () => {
   }
 
   const currentScore = getSecurityScoreInfo(securityMetrics.averageScore)
+  
+  // Use intersection observer for scroll animations
+  const [ref, inView] = useInView({
+    triggerOnce: true,
+    threshold: 0.1,
+  })
+
+  // Animation variants
+  const fadeIn = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { duration: 0.5 }
+    }
+  }
+
+  const scoreBadgeVariants = {
+    initial: { scale: 0.9, opacity: 0 },
+    animate: { 
+      scale: 1, 
+      opacity: 1,
+      transition: {
+        type: "spring" as const,
+        stiffness: 300,
+        duration: 0.8
+      }
+    },
+    hover: {
+      scale: 1.1,
+      transition: {
+        type: "spring" as const,
+        stiffness: 400,
+        damping: 10
+      }
+    }
+  }
+
+  const fadeInUp = {
+    hidden: { opacity: 0, y: 40 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { type: "spring" as const, stiffness: 100, damping: 15 }
+    }
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <motion.div 
+      className="space-y-8"
+      initial="hidden"
+      animate="visible"
+      variants={fadeIn}
+    >
+      {/* Header Section */}
+      <AnimatedContainer className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Security Dashboard</h1>
-          <p className="text-gray-600">Monitor your repositories' security status and recent activity</p>
+          <motion.h1 
+            className="text-3xl font-bold text-gray-900 dark:text-white"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            Security Dashboard
+          </motion.h1>
+          <motion.p 
+            className="text-gray-600 dark:text-gray-300"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+          >
+            Monitor your repositories' security status and recent activity
+          </motion.p>
         </div>
-        <div className="flex items-center space-x-3">
+        
+        <motion.div 
+          whileHover={{ scale: 1.05 }} 
+          whileTap={{ scale: 0.95 }}
+        >
           <Link
             to="/scan"
-            className="btn-primary flex items-center space-x-2"
+            className="btn-primary flex items-center space-x-2 px-4 py-2 rounded-lg bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
           >
             <Search className="h-4 w-4" />
             <span>New Scan</span>
+            <motion.div
+              animate={{
+                x: [0, 5, 0],
+              }}
+              transition={{
+                duration: 1.5,
+                repeat: Infinity,
+                repeatType: "loop",
+              }}
+            >
+              <ArrowRight className="h-4 w-4" />
+            </motion.div>
           </Link>
-        </div>
-      </div>
+        </motion.div>
+      </AnimatedContainer>
 
       {/* Security Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <AnimatedContainer 
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        staggerChildren={true}
+        staggerDelay={0.1}
+      >
         {/* Overall Security Score */}
-        <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+        <AnimatedCard index={0}>
           <div className="card-body">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Security Score</p>
-                <p className="text-2xl font-bold text-gray-900">{currentScore.score}</p>
-                <p className="text-xs text-gray-500">{currentScore.description}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Security Score</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{currentScore.score}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{currentScore.description}</p>
               </div>
-              <div className={cn("security-score", currentScore.color)}>
+              <motion.div 
+                className={cn("security-score", currentScore.color, "flex items-center justify-center h-16 w-16 rounded-full text-2xl font-bold text-white")}
+                variants={scoreBadgeVariants}
+                initial="initial"
+                animate="animate"
+                whileHover="hover"
+              >
                 {currentScore.score}
-              </div>
+              </motion.div>
             </div>
           </div>
-        </motion.div>
+        </AnimatedCard>
 
         {/* Total Repositories */}
-        <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.03 }}>
+        <AnimatedCard index={1}>
           <div className="card-body">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Repositories</p>
-                <p className="text-2xl font-bold text-gray-900">{repositories.length}</p>
-                <p className="text-xs text-gray-500">Total scanned</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Repositories</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{repositories.length}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Total scanned</p>
               </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
-                <Shield className="h-6 w-6 text-blue-600" />
-              </div>
+              <AnimatedIcon color="info" size="lg">
+                <Shield className="h-6 w-6" />
+              </AnimatedIcon>
             </div>
           </div>
-        </motion.div>
+        </AnimatedCard>
 
         {/* Total Vulnerabilities */}
-        <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.06 }}>
+        <AnimatedCard index={2}>
           <div className="card-body">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Vulnerabilities</p>
-                <p className="text-2xl font-bold text-gray-900">{securityMetrics.totalVulnerabilities}</p>
-                <p className="text-xs text-gray-500">Found in scans</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Vulnerabilities</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics.totalVulnerabilities}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Found in scans</p>
               </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-100">
-                <AlertTriangle className="h-6 w-6 text-red-600" />
-              </div>
+              <AnimatedIcon color="danger" size="lg">
+                <AlertTriangle className="h-6 w-6" />
+              </AnimatedIcon>
             </div>
           </div>
-        </motion.div>
+        </AnimatedCard>
 
         {/* Recent Scans */}
-        <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: 0.09 }}>
+        <AnimatedCard index={3}>
           <div className="card-body">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Recent Scans</p>
-                <p className="text-2xl font-bold text-gray-900">{recentScans.length}</p>
-                <p className="text-xs text-gray-500">Last 5 scans</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Recent Scans</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{recentScans.length}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Last 5 scans</p>
               </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-100">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
+              <AnimatedIcon color="success" size="lg">
+                <CheckCircle className="h-6 w-6" />
+              </AnimatedIcon>
             </div>
           </div>
-        </motion.div>
-      </div>
+        </AnimatedCard>
+      </AnimatedContainer>
 
       {/* Vulnerability Severity Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div ref={ref}>
+        <AnimatedContainer 
+          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+          staggerChildren={true}
+          staggerDelay={0.1}
+        >
         {/* Severity Chart */}
-        <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+        <AnimatedCard index={0}>
           <div className="card-header">
-            <h3 className="text-lg font-medium text-gray-900">Vulnerability Severity</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Vulnerability Severity</h3>
           </div>
           <div className="card-body">
             <div className="space-y-4">
-              {Object.entries(securityMetrics.severityBreakdown).map(([severity, count]) => (
-                <div key={severity} className="flex items-center justify-between">
+              {Object.entries(securityMetrics.severityBreakdown).map(([severity, count], index) => (
+                <motion.div 
+                  key={severity} 
+                  className="flex items-center justify-between"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+                  transition={{ delay: index * 0.1 + 0.2 }}
+                >
                   <div className="flex items-center space-x-3">
-                    <div className={cn(
-                      "h-3 w-3 rounded-full",
-                      severity === 'CRITICAL' && "bg-security-critical",
-                      severity === 'HIGH' && "bg-security-high",
-                      severity === 'MEDIUM' && "bg-security-medium",
-                      severity === 'LOW' && "bg-security-low"
-                    )} />
-                    <span className="text-sm font-medium text-gray-700 capitalize">{severity}</span>
+                    <GlowingBadge severity={severity as any} size="sm" glow={true}>
+                      {severity.toLowerCase()}
+                    </GlowingBadge>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm font-bold text-gray-900">{count}</span>
-                    <span className="text-xs text-gray-500">
-                      ({((count / securityMetrics.totalVulnerabilities) * 100).toFixed(1)}%)
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">{count}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      ({((count / securityMetrics.totalVulnerabilities || 1) * 100).toFixed(1)}%)
                     </span>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>
-        </motion.div>
+        </AnimatedCard>
 
         {/* Security Trend */}
-        <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+        <AnimatedCard index={1}>
           <div className="card-header">
-            <h3 className="text-lg font-medium text-gray-900">Security Trend</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Security Trend</h3>
             <div className="flex items-center space-x-2">
               {securityMetrics.trend > 0 ? (
-                <TrendingUp className="h-4 w-4 text-green-500" />
+                <motion.div
+                  animate={{
+                    y: [0, -4, 0],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                  }}
+                >
+                  <TrendingUp className="h-4 w-4 text-green-500" />
+                </motion.div>
               ) : (
-                <TrendingDown className="h-4 w-4 text-red-500" />
+                <motion.div
+                  animate={{
+                    y: [0, 4, 0],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                  }}
+                >
+                  <TrendingDown className="h-4 w-4 text-red-500" />
+                </motion.div>
               )}
               <span className={cn(
                 "text-sm font-medium",
-                securityMetrics.trend > 0 ? "text-green-600" : "text-red-600"
+                securityMetrics.trend > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
               )}>
                 {securityMetrics.trend > 0 ? '+' : ''}{securityMetrics.trend}%
               </span>
@@ -228,176 +335,244 @@ const Dashboard: React.FC = () => {
           <div className="card-body">
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Last scan</span>
-                <span className="font-medium text-gray-900">
+                <span className="text-gray-600 dark:text-gray-300">Last scan</span>
+                <span className="font-medium text-gray-900 dark:text-white">
                   {securityMetrics.lastScanScore || 'N/A'}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Previous scan</span>
-                <span className="font-medium text-gray-900">
+                <span className="text-gray-600 dark:text-gray-300">Previous scan</span>
+                <span className="font-medium text-gray-900 dark:text-white">
                   {securityMetrics.previousScanScore || 'N/A'}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Change</span>
+                <span className="text-gray-600 dark:text-gray-300">Change</span>
                 <span className={cn(
                   "font-medium",
-                  securityMetrics.trend > 0 ? "text-green-600" : "text-red-600"
+                  securityMetrics.trend > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                 )}>
                   {securityMetrics.trend > 0 ? 'Improved' : 'Declined'}
                 </span>
               </div>
             </div>
           </div>
-        </motion.div>
-      </div>
+        </AnimatedCard>
+      </AnimatedContainer>
 
       {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <AnimatedContainer 
+        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+        staggerChildren={true}
+        staggerDelay={0.1}
+      >
         {/* Recent Scans */}
-        <div className="card">
+        <AnimatedCard index={0}>
           <div className="card-header">
-            <h3 className="text-lg font-medium text-gray-900">Recent Scans</h3>
-            <Link to="/scan" className="text-sm text-primary-600 hover:text-primary-500">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Recent Scans</h3>
+            <Link to="/scan" className="text-sm text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
               View all
             </Link>
           </div>
           <div className="card-body">
             {recentScans.length === 0 ? (
-              <div className="text-center py-8">
-                <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">No scans yet</p>
-                <Link to="/scan" className="text-primary-600 hover:text-primary-500 text-sm">
+              <motion.div 
+                className="text-center py-8"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.5 }}
+                >
+                  <Clock className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                </motion.div>
+                <p className="text-gray-500 dark:text-gray-400">No scans yet</p>
+                <Link to="/scan" className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300 text-sm">
                   Start your first scan
                 </Link>
-              </div>
+              </motion.div>
             ) : (
               <div className="space-y-4">
-                {recentScans.map((scan) => (
-                  <div key={scan.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200">
-                    <div className="flex items-center space-x-3">
-                      <div className={cn(
-                        "h-2 w-2 rounded-full",
-                        scan.scan_status === 'completed' && "bg-green-400",
-                        scan.scan_status === 'scanning' && "bg-yellow-400",
-                        scan.scan_status === 'failed' && "bg-red-400"
-                      )} />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {scan.scan_status === 'completed' ? 'Scan completed' : 'Scan in progress'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(scan.created_at).toLocaleDateString()}
-                        </p>
+                <AnimatePresence>
+                  {recentScans.map((scan, index) => (
+                    <motion.div
+                      key={scan.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-md transition-all duration-300"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      whileHover={{ scale: 1.02, backgroundColor: "rgba(255,255,255,0.05)" }}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <motion.div 
+                          className={cn(
+                            "h-2 w-2 rounded-full",
+                            scan.scan_status === 'completed' && "bg-green-400",
+                            scan.scan_status === 'scanning' && "bg-yellow-400",
+                            scan.scan_status === 'failed' && "bg-red-400"
+                          )}
+                          animate={scan.scan_status === 'scanning' ? {
+                            scale: [1, 1.5, 1],
+                            opacity: [1, 0.7, 1]
+                          } : {}}
+                          transition={{
+                            duration: 2,
+                            repeat: scan.scan_status === 'scanning' ? Infinity : 0
+                          }}
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">
+                            {scan.scan_status === 'completed' ? 'Scan completed' : 'Scan in progress'}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {new Date(scan.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-gray-900">{scan.security_score}</p>
-                      <p className="text-xs text-gray-500">Score</p>
-                    </div>
-                  </div>
-                ))}
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-900 dark:text-white">{scan.security_score}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Score</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             )}
           </div>
-        </div>
+        </AnimatedCard>
 
         {/* Top Vulnerabilities */}
-        <div className="card">
+        <AnimatedCard index={1}>
           <div className="card-header">
-            <h3 className="text-lg font-medium text-gray-900">Top Vulnerabilities</h3>
-            <Link to="/vulnerabilities" className="text-sm text-primary-600 hover:text-primary-500">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Top Vulnerabilities</h3>
+            <Link to="/vulnerabilities" className="text-sm text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
               View all
             </Link>
           </div>
           <div className="card-body">
             {topVulnerabilities.length === 0 ? (
-              <div className="text-center py-8">
-                <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
-                <p className="text-gray-500">No vulnerabilities found</p>
-                <p className="text-sm text-gray-400">Great job keeping your code secure!</p>
-              </div>
+              <motion.div 
+                className="text-center py-8"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                <motion.div
+                  initial={{ scale: 0, rotate: 0 }}
+                  animate={{ scale: 1, rotate: 360 }}
+                  transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.5 }}
+                >
+                  <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
+                </motion.div>
+                <p className="text-gray-500 dark:text-gray-400">No vulnerabilities found</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500">Great job keeping your code secure!</p>
+              </motion.div>
             ) : (
               <div className="space-y-3">
-                {topVulnerabilities.map((vuln) => (
-                  <div key={vuln.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-200">
-                    <div className="flex items-center space-x-3">
-                      <div className={cn(
-                        "badge",
-                        vuln.severity === 'CRITICAL' && "badge-critical",
-                        vuln.severity === 'HIGH' && "badge-high",
-                        vuln.severity === 'MEDIUM' && "badge-medium",
-                        vuln.severity === 'LOW' && "badge-low"
-                      )}>
-                        {vuln.severity}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 truncate max-w-xs">
-                          {vuln.title}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {vuln.affected_component || 'Unknown component'}
-                        </p>
-                      </div>
-                    </div>
-                    <Link
-                      to={`/vulnerability/${vuln.id}`}
-                      className="text-primary-600 hover:text-primary-500"
+                <AnimatePresence>
+                  {topVulnerabilities.map((vuln, index) => (
+                    <motion.div
+                      key={vuln.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-md transition-all duration-300"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      whileHover={{ scale: 1.02, backgroundColor: "rgba(255,255,255,0.05)" }}
                     >
-                      <Eye className="h-4 w-4" />
-                    </Link>
-                  </div>
-                ))}
+                      <div className="flex items-center space-x-3">
+                        <GlowingBadge severity={vuln.severity} size="sm" glow={true}>
+                          {vuln.severity}
+                        </GlowingBadge>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-xs">
+                            {vuln.title}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {vuln.affected_component || 'Unknown component'}
+                          </p>
+                        </div>
+                      </div>
+                      <motion.div whileHover={{ scale: 1.2, rotate: 15 }} whileTap={{ scale: 0.9 }}>
+                        <Link
+                          to={`/vulnerability/${vuln.id}`}
+                          className="text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Link>
+                      </motion.div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             )}
           </div>
-        </div>
+        </AnimatedCard>
+      </AnimatedContainer>
       </div>
 
       {/* Quick Actions */}
-      <div className="card">
+      <AnimatedCard 
+        className="bg-gradient-to-br from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 border-none shadow-xl"
+        initial="hidden"
+        animate={inView ? "visible" : "hidden"}
+        variants={fadeInUp}
+      >
         <div className="card-header">
-          <h3 className="text-lg font-medium text-gray-900">Quick Actions</h3>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Quick Actions</h3>
         </div>
         <div className="card-body">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Link
-              to="/scan"
-              className="flex items-center p-4 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors"
-            >
-              <Search className="h-6 w-6 text-primary-600 mr-3" />
-              <div>
-                <p className="font-medium text-gray-900">Scan Repository</p>
-                <p className="text-sm text-gray-500">Check for new vulnerabilities</p>
-              </div>
-            </Link>
+            <motion.div whileHover={{ scale: 1.03, y: -5 }} whileTap={{ scale: 0.98 }}>
+              <Link
+                to="/scan"
+                className="flex items-center p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 bg-white dark:bg-gray-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all duration-300 shadow-sm hover:shadow-md group"
+              >
+                <AnimatedIcon color="primary" size="md" className="mr-3 group-hover:rotate-12 transition-all duration-300">
+                  <Search className="h-5 w-5" />
+                </AnimatedIcon>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Scan Repository</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Check for new vulnerabilities</p>
+                </div>
+              </Link>
+            </motion.div>
 
-            <button
-              onClick={() => downloadSecurityBadge(currentScore.score, 'overall')}
-              className="flex items-center p-4 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors text-left"
-            >
-              <Download className="h-6 w-6 text-primary-600 mr-3" />
-              <div>
-                <p className="font-medium text-gray-900">Download Badge</p>
-                <p className="text-sm text-gray-500">Get your security score badge</p>
-              </div>
-            </button>
+            <motion.div whileHover={{ scale: 1.03, y: -5 }} whileTap={{ scale: 0.98 }}>
+              <button
+                onClick={() => downloadSecurityBadge(currentScore.score, 'overall')}
+                className="flex items-center p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 bg-white dark:bg-gray-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all duration-300 shadow-sm hover:shadow-md w-full text-left group"
+              >
+                <AnimatedIcon color="info" size="md" className="mr-3 group-hover:rotate-12 transition-all duration-300">
+                  <Download className="h-5 w-5" />
+                </AnimatedIcon>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Download Badge</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Get your security score badge</p>
+                </div>
+              </button>
+            </motion.div>
 
-            <Link
-              to="/vulnerabilities"
-              className="flex items-center p-4 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors"
-            >
-              <BarChart3 className="h-6 w-6 text-primary-600 mr-3" />
-              <div>
-                <p className="font-medium text-gray-900">View Reports</p>
-                <p className="text-sm text-gray-500">Detailed security analysis</p>
-              </div>
-            </Link>
+            <motion.div whileHover={{ scale: 1.03, y: -5 }} whileTap={{ scale: 0.98 }}>
+              <Link
+                to="/vulnerabilities"
+                className="flex items-center p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 bg-white dark:bg-gray-800 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all duration-300 shadow-sm hover:shadow-md group"
+              >
+                <AnimatedIcon color="warning" size="md" className="mr-3 group-hover:rotate-12 transition-all duration-300">
+                  <BarChart3 className="h-5 w-5" />
+                </AnimatedIcon>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">View Reports</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Detailed security analysis</p>
+                </div>
+              </Link>
+            </motion.div>
           </div>
         </div>
-      </div>
-    </div>
+      </AnimatedCard>
+    </motion.div>
   )
 }
 

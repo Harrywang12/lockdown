@@ -4,6 +4,8 @@ import {
   ScanResponse, 
   ExplanationRequest, 
   ExplanationResponse,
+  GHSARequest,
+  GHSADetails,
   Repository,
   Vulnerability,
   ScanSession
@@ -13,7 +15,8 @@ import {
 const API_BASE_URL = import.meta.env.VITE_SUPABASE_URL
 const API_ENDPOINTS = {
   scan: '/functions/v1/scan',
-  explain: '/functions/v1/explain'
+  explain: '/functions/v1/explain',
+  ghsa: '/functions/v1/ghsa'
 }
 
 // Helper function to get auth headers
@@ -63,16 +66,88 @@ export const getVulnerabilityExplanation = async (request: ExplanationRequest): 
   try {
     const headers = await getAuthHeaders()
     
+    // Add enhanced request data for improved explanations
+    const enhancedRequest = {
+      ...request,
+      options: {
+        detailed: true,
+        code_examples: true,
+        include_references: true
+      }
+    }
+    
     const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.explain}`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(request)
+      body: JSON.stringify(enhancedRequest)
     })
     
     return handleApiResponse<ExplanationResponse>(response)
   } catch (error) {
     console.error('Get explanation error:', error)
     throw error
+  }
+}
+
+// GHSA details API
+export const getGHSADetails = async (request: GHSARequest): Promise<GHSADetails> => {
+  try {
+    const headers = await getAuthHeaders()
+    
+    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.ghsa}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(request)
+    })
+    
+    const responseData = await handleApiResponse<{success: boolean, details: GHSADetails}>(response)
+    return responseData.details
+  } catch (error) {
+    console.error('Get GHSA details error:', error)
+    
+    // If our backend API fails, try to fetch from GitHub directly
+    try {
+      const ghsaId = request.ghsaId
+      const githubResponse = await fetch(`https://api.github.com/advisories/${ghsaId}`, {
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'LockDown-Security-Scanner'
+        }
+      })
+      
+      if (!githubResponse.ok) {
+        throw new Error(`GitHub API error: ${githubResponse.status}`)
+      }
+      
+      const githubData = await githubResponse.json()
+      
+      // Transform GitHub API response to our GHSADetails format
+      return {
+        id: githubData.id,
+        ghsa_id: githubData.ghsa_id,
+        summary: githubData.summary,
+        description: githubData.description,
+        severity: githubData.severity.toUpperCase(),
+        classifications: githubData.vulnerabilities?.map((v: any) => v.classification),
+        cvss_score: githubData.cvss?.score,
+        cvss_vector: githubData.cvss?.vector_string,
+        published_at: githubData.published_at,
+        updated_at: githubData.updated_at,
+        references: githubData.references?.map((ref: any) => ref.url),
+        affected_packages: githubData.affected?.map((pkg: any) => ({
+          name: pkg.package.name,
+          ecosystem: pkg.package.ecosystem,
+          affected_versions: pkg.ranges?.map((r: any) => r.description).join(', ') || 'Unknown',
+          patched_versions: pkg.ranges?.[0]?.fixed_version
+        })),
+        cve_ids: githubData.cve_ids,
+        vulnerable_functions: githubData.vulnerable_functions,
+        patched_versions: githubData.patched_versions
+      }
+    } catch (fallbackError) {
+      console.error('GitHub API fallback error:', fallbackError)
+      throw error // Throw the original error
+    }
   }
 }
 
@@ -417,14 +492,22 @@ const getScoreColor = (score: number): string => {
 }
 
 const convertToCSV = (report: any): string => {
-  const headers = ['Vulnerability', 'Severity', 'Description', 'Component', 'CVE ID']
-  const rows = report.vulnerabilities.map((vuln: Vulnerability) => [
-    vuln.title,
-    vuln.severity,
-    vuln.description,
-    vuln.affected_component || 'N/A',
-    vuln.cve_id || 'N/A'
-  ])
+  const headers = ['Vulnerability', 'Severity', 'Description', 'Component', 'CVE ID', 'GHSA ID']
+  const rows = report.vulnerabilities.map((vuln: Vulnerability) => {
+    // Extract GHSA ID if it exists
+    const ghsaId = vuln.raw_data?.aliases?.find((a: string) => typeof a === 'string' && a.startsWith('GHSA-')) || 
+                  (vuln.raw_data?.id && typeof vuln.raw_data.id === 'string' && vuln.raw_data.id.startsWith('GHSA-') 
+                    ? vuln.raw_data.id : '')
+    
+    return [
+      vuln.title,
+      vuln.severity,
+      vuln.description,
+      vuln.affected_component || 'N/A',
+      vuln.cve_id || 'N/A',
+      ghsaId || 'N/A'
+    ]
+  })
   
   return [headers, ...rows]
     .map(row => row.map(cell => `"${cell}"`).join(','))

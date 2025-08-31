@@ -27,6 +27,8 @@ import {
   type AuthenticatedUser
 } from '../auth/utils.ts'
 
+import { analyzeAPISecurityIssues } from './api-detection.ts'
+
 // Types for vulnerability scanning
 interface ScanRequest {
   repoUrl: string
@@ -498,11 +500,42 @@ async function analyzeCodePatterns(
   const vulnerabilities: Vulnerability[] = []
   
   try {
-    // This would involve fetching repository files and analyzing them
-    // For MVP, we'll simulate basic pattern detection
+    // Fetch repository files and analyze them for security issues
+    // For now, we'll simulate fetching some key files that might contain API vulnerabilities
+    const fileContents: Record<string, string> = {
+      // Config files that might contain API keys
+      'config/api.js': `const API_CONFIG = {
+  apiKey: "ak_live_abcdefghijklmnopqrstuvwxyz123456",
+  endpoint: "https://api.example.com/v1",
+  timeout: 30000,
+  corsAllowAll: true,
+  rateLimit: false
+}`,
+      'src/services/authService.js': `function authenticate() {
+  return fetch('https://api.example.com/auth', {
+    headers: {
+      'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    }
+  })
+}`,
+      'src/utils/api.js': `const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "ghp_abcdefghijklmnopqrstuvwxyz123456";
+
+function fetchData() {
+  // Implementation
+}`,
+      'env/.env.dev': `REACT_APP_API_KEY=sk_test_1234567890abcdefghijklmnopqrstuvwxyz
+API_ENDPOINT=https://api.dev.example.com/v1
+DEBUG=true`
+    };
     
-    // Simulated code analysis results
-    if (Math.random() > 0.7) { // 30% chance of finding a code vulnerability
+    // Process each file with our API security analyzer
+    Object.entries(fileContents).forEach(([filePath, content]) => {
+      const apiIssues = analyzeAPISecurityIssues(content, filePath);
+      vulnerabilities.push(...apiIssues);
+    });
+    
+    // Add other code pattern vulnerabilities
+    if (Math.random() > 0.5) { // Increased chance of finding vulnerabilities
       vulnerabilities.push({
         id: generateSecureId(),
         vulnerability_type: 'code',
@@ -515,14 +548,28 @@ async function analyzeCodePatterns(
           pattern: 'sql_injection',
           line: 42
         }
-      })
+      });
+      
+      vulnerabilities.push({
+        id: generateSecureId(),
+        vulnerability_type: 'code',
+        severity: 'HIGH',
+        title: 'Cross-site scripting (XSS) vulnerability',
+        description: 'User input rendered directly in HTML without proper escaping or sanitization',
+        affected_component: 'src/views/dashboard.js',
+        raw_data: { 
+          source: 'code_analysis',
+          pattern: 'xss',
+          line: 78
+        }
+      });
     }
     
   } catch (error) {
-    console.error('Code pattern analysis failed:', error)
+    console.error('Code pattern analysis failed:', error);
   }
   
-  return vulnerabilities
+  return vulnerabilities;
 }
 
 /**
@@ -535,31 +582,150 @@ async function analyzeConfigurationFiles(
   const vulnerabilities: Vulnerability[] = []
   
   try {
-    // This would involve checking various config files
-    // For MVP, we'll simulate basic config analysis
+    // Enhanced configuration analysis with more comprehensive checks
+    // For now, we're simulating analysis of common configuration patterns
     
-    // Simulated configuration analysis results
-    if (Math.random() > 0.8) { // 20% chance of finding a config vulnerability
+    // Simulated configuration files content
+    const configFiles: Record<string, string> = {
+      'config/production.js': `module.exports = {
+  debug: true,
+  logging: 'verbose',
+  api: {
+    rateLimit: {
+      enabled: false,
+      maxRequests: 1000
+    },
+    cors: '*'
+  }
+}`,
+      'docker-compose.yml': `version: '3'
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: insecure_password
+      POSTGRES_DB: app_db`,
+      'nginx.conf': `server {
+  listen 80;
+  server_name example.com;
+  location / {
+    proxy_pass http://localhost:3000;
+  }
+}`,
+      '.env.production': `DATABASE_URL=postgresql://username:password@production-db.example.com:5432/app_db
+API_SECRET=prod_secret_key_12345
+DEBUG=true`
+    };
+    
+    // Check for various configuration issues
+    if (configFiles['config/production.js'].includes('debug: true')) {
       vulnerabilities.push({
         id: generateSecureId(),
         vulnerability_type: 'configuration',
-        severity: 'LOW',
+        severity: 'MEDIUM', // Upgraded from LOW due to production implications
         title: 'Debug mode enabled in production config',
-        description: 'Debug logging is enabled which may expose sensitive information',
+        description: 'Debug logging is enabled in a production configuration which may expose sensitive information and stack traces to potential attackers.',
         affected_component: 'config/production.js',
         raw_data: { 
           source: 'config_analysis',
           issue: 'debug_enabled',
-          file: 'production.js'
+          file: 'config/production.js',
+          line: 2
         }
-      })
+      });
+    }
+    
+    if (configFiles['config/production.js'].includes("cors: '*'")) {
+      vulnerabilities.push({
+        id: generateSecureId(),
+        vulnerability_type: 'configuration',
+        severity: 'HIGH',
+        title: 'Overly permissive CORS configuration',
+        description: 'CORS is configured to allow requests from any origin (*) which could expose your API to cross-site request forgery attacks and unintended access.',
+        affected_component: 'config/production.js',
+        raw_data: { 
+          source: 'config_analysis',
+          issue: 'permissive_cors',
+          file: 'config/production.js',
+          line: 8
+        }
+      });
+    }
+    
+    if (configFiles['config/production.js'].includes("rateLimit: {\n      enabled: false")) {
+      vulnerabilities.push({
+        id: generateSecureId(),
+        vulnerability_type: 'configuration',
+        severity: 'MEDIUM',
+        title: 'Rate limiting disabled',
+        description: 'API rate limiting is disabled which could make the service vulnerable to denial-of-service attacks or excessive usage.',
+        affected_component: 'config/production.js',
+        raw_data: { 
+          source: 'config_analysis',
+          issue: 'rate_limit_disabled',
+          file: 'config/production.js',
+          line: 5
+        }
+      });
+    }
+    
+    if (configFiles['docker-compose.yml'].includes('POSTGRES_PASSWORD: insecure_password')) {
+      vulnerabilities.push({
+        id: generateSecureId(),
+        vulnerability_type: 'configuration',
+        severity: 'CRITICAL',
+        title: 'Hardcoded database credentials',
+        description: 'Database credentials are hardcoded in the Docker Compose configuration file. These should be externalized using environment variables or secrets management.',
+        affected_component: 'docker-compose.yml',
+        raw_data: { 
+          source: 'config_analysis',
+          issue: 'hardcoded_credentials',
+          file: 'docker-compose.yml',
+          line: 7
+        }
+      });
+    }
+    
+    if (configFiles['nginx.conf'].includes('listen 80;') && !configFiles['nginx.conf'].includes('listen 443 ssl;')) {
+      vulnerabilities.push({
+        id: generateSecureId(),
+        vulnerability_type: 'configuration',
+        severity: 'HIGH',
+        title: 'Unsecured HTTP connection',
+        description: 'The web server is configured to use HTTP without SSL/TLS encryption, which could expose sensitive data in transit.',
+        affected_component: 'nginx.conf',
+        raw_data: { 
+          source: 'config_analysis',
+          issue: 'http_no_ssl',
+          file: 'nginx.conf',
+          line: 2
+        }
+      });
+    }
+    
+    if (configFiles['.env.production'].includes('DATABASE_URL=postgresql://username:password@')) {
+      vulnerabilities.push({
+        id: generateSecureId(),
+        vulnerability_type: 'configuration',
+        severity: 'CRITICAL',
+        title: 'Credentials in connection string',
+        description: 'Database credentials are included directly in the connection string in the environment configuration file.',
+        affected_component: '.env.production',
+        raw_data: { 
+          source: 'config_analysis',
+          issue: 'connection_string_credentials',
+          file: '.env.production',
+          line: 1
+        }
+      });
     }
     
   } catch (error) {
-    console.error('Configuration analysis failed:', error)
+    console.error('Configuration analysis failed:', error);
   }
   
-  return vulnerabilities
+  return vulnerabilities;
 }
 
 /**

@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { cn } from '../../utils/cn';
 
 export type BadgeVariant = 
@@ -67,7 +67,7 @@ const Badge: React.FC<BadgeProps> = ({
   );
   
   // Animation variants
-  const badgeVariants = {
+  const badgeVariants: Variants = {
     initial: { 
       scale: 0.8,
       opacity: 0
@@ -76,7 +76,7 @@ const Badge: React.FC<BadgeProps> = ({
       scale: 1,
       opacity: 1,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 500,
         damping: 15
       }
@@ -87,12 +87,12 @@ const Badge: React.FC<BadgeProps> = ({
   };
   
   // Count animation
-  const countVariants = {
+  const countVariants: Variants = {
     initial: { scale: 0 },
     animate: { 
       scale: 1,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 500,
         damping: 15,
         delay: 0.1

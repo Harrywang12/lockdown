@@ -29,6 +29,7 @@ import {
 interface ExplanationRequest {
   vulnerability: {
     cve_id?: string
+    ghsa_id?: string
     severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
     title: string
     description: string
@@ -43,6 +44,12 @@ interface ExplanationRequest {
     language?: string
     framework?: string
   }
+  options?: {
+    include_code_examples?: boolean
+    include_detection_methods?: boolean
+    include_best_practices?: boolean
+    detailed_explanation?: boolean
+  }
 }
 
 interface AIExplanation {
@@ -50,6 +57,8 @@ interface AIExplanation {
   suggestedFix: string
   riskAssessment: string
   mitigationSteps: string[]
+  detectionMethods?: string
+  securityBestPractices?: string
   confidenceScore: number
   tokensUsed: number
   processingTime: number
@@ -66,18 +75,26 @@ interface ExplanationResponse {
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
 
-// Security-focused prompt template for vulnerability explanation
-const VULNERABILITY_PROMPT_TEMPLATE = `You are a cybersecurity expert specializing in software vulnerability analysis and remediation. 
+// Enhanced security-focused prompt template for improved vulnerability explanation
+const VULNERABILITY_PROMPT_TEMPLATE = `You are a highly experienced cybersecurity expert specializing in software vulnerability analysis, remediation, and security architecture. Your task is to provide a comprehensive analysis of the security vulnerability described below.
 
-Please analyze the following security vulnerability and provide:
+Please analyze the following security vulnerability and provide a detailed, actionable response with:
 
-1. **Clear Explanation**: Explain what this vulnerability is, how it works, and why it's dangerous in simple terms that a student developer can understand.
+1. **Clear Explanation**: Explain what this vulnerability is, how it works, and why it's dangerous in simple terms that a student developer can understand. Include specific attack vectors and exploitation techniques when relevant.
 
-2. **Suggested Fix**: Provide specific, actionable code examples or configuration changes to fix this vulnerability.
+2. **Suggested Fix**: Provide specific, actionable code examples or configuration changes to fix this vulnerability. Include before/after code examples when possible, with comments explaining the changes.
 
-3. **Risk Assessment**: Explain the potential impact and risk level of this vulnerability.
+3. **Risk Assessment**: Explain the potential impact and risk level of this vulnerability. Include discussion of:
+   - Potential data exposure or system compromise
+   - Likelihood of exploitation in the wild
+   - Business impact and regulatory concerns
+   - Whether this vulnerability could be part of a larger attack chain
 
-4. **Mitigation Steps**: List 3-5 specific steps to address this vulnerability, including any immediate actions needed.
+4. **Mitigation Steps**: List 3-5 specific steps to address this vulnerability, including immediate actions and long-term preventive measures. Prioritize these steps clearly.
+
+5. **Detection Methods**: Explain how to identify if this vulnerability has been exploited and how to monitor for future occurrences.
+
+6. **Security Best Practices**: Provide related security best practices to prevent similar vulnerabilities in the future.
 
 **Vulnerability Details:**
 - Title: {title}
@@ -86,22 +103,29 @@ Please analyze the following security vulnerability and provide:
 - Type: {vulnerability_type}
 - Affected Component: {affected_component}
 - CVE ID: {cve_id || 'Not specified'}
+- GHSA ID: {ghsa_id || 'Not specified'}
 - CVSS Score: {cvss_score || 'Not specified'}
 
 **Context:**
 - Repository: {repository || 'Not specified'}
 - Language/Framework: {language || 'Not specified'}
 
+If this is an exposed API key or credential, emphasize the urgency of rotation and revocation.
+If this is a known CVE or GHSA, include specific information about exploitability and patch availability.
+If this is a misconfiguration, explain secure configuration patterns for the affected system.
+
 Please format your response as JSON with the following structure:
 {
-  "explanation": "Clear explanation of the vulnerability",
-  "suggestedFix": "Specific fix with code examples",
-  "riskAssessment": "Risk level and potential impact",
-  "mitigationSteps": ["Step 1", "Step 2", "Step 3"],
+  "explanation": "Clear, detailed explanation of the vulnerability with attack vectors",
+  "suggestedFix": "Specific fix with code examples and comments",
+  "riskAssessment": "Comprehensive risk analysis including impact and exploitation likelihood",
+  "mitigationSteps": ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"],
+  "detectionMethods": "Ways to identify exploitation and monitor for this vulnerability",
+  "securityBestPractices": "Related preventive measures and security patterns",
   "confidenceScore": 0.95
 }
 
-Focus on practical, actionable advice that helps developers understand and fix the issue quickly.`
+Provide the most thorough, accurate, and actionable guidance possible, with specific examples tailored to the vulnerability type and affected component.`
 
 /**
  * Main handler for the explain endpoint
@@ -162,11 +186,16 @@ Deno.serve(async (request: Request) => {
     logSecurityEvent('explanation_requested', user.id, {
       vulnerabilityTitle: requestBody.vulnerability.title,
       severity: requestBody.vulnerability.severity,
-      cveId: requestBody.vulnerability.cve_id
+      cveId: requestBody.vulnerability.cve_id,
+      ghsaId: requestBody.vulnerability.ghsa_id
     })
 
     // Generate AI explanation
-    const explanationResult = await generateAIExplanation(requestBody.vulnerability, requestBody.context)
+    const explanationResult = await generateAIExplanation(
+      requestBody.vulnerability, 
+      requestBody.context,
+      requestBody.options
+    )
 
     if (!explanationResult.success) {
       return new Response(
@@ -220,7 +249,8 @@ Deno.serve(async (request: Request) => {
  */
 async function generateAIExplanation(
   vulnerability: ExplanationRequest['vulnerability'],
-  context?: ExplanationRequest['context']
+  context?: ExplanationRequest['context'],
+  options?: ExplanationRequest['options']
 ): Promise<ExplanationResponse> {
   
   if (!GEMINI_API_KEY) {
@@ -235,15 +265,17 @@ async function generateAIExplanation(
   const startTime = Date.now()
   
   try {
-    // Check if we have a cached explanation first
-    const cachedExplanation = await getCachedExplanation(vulnerability)
-    if (cachedExplanation) {
-      return {
-        success: true,
-        explanation: {
-          ...cachedExplanation,
-          processingTime: Date.now() - startTime,
-          tokensUsed: 0 // Cached response, no new tokens used
+    // Check if we have a cached explanation first (skip if options request detailed analysis)
+    if (!options?.detailed_explanation) {
+      const cachedExplanation = await getCachedExplanation(vulnerability)
+      if (cachedExplanation) {
+        return {
+          success: true,
+          explanation: {
+            ...cachedExplanation,
+            processingTime: Date.now() - startTime,
+            tokensUsed: 0 // Cached response, no new tokens used
+          }
         }
       }
     }
@@ -256,6 +288,7 @@ async function generateAIExplanation(
       .replace('{vulnerability_type}', vulnerability.vulnerability_type || 'Unknown')
       .replace('{affected_component}', vulnerability.affected_component || 'Unknown')
       .replace('{cve_id}', vulnerability.cve_id || 'Not specified')
+      .replace('{ghsa_id}', vulnerability.ghsa_id || 'Not specified')
       .replace('{cvss_score}', vulnerability.cvss_score?.toString() || 'Not specified')
       .replace('{repository}', context?.repository || 'Not specified')
       .replace('{language}', context?.language || 'Not specified')
@@ -273,10 +306,10 @@ async function generateAIExplanation(
           }]
         }],
         generationConfig: {
-          temperature: 0.3, // Lower temperature for more consistent, focused responses
+          temperature: 0.2, // Lower temperature for more consistent, focused responses
           topK: 40,
           topP: 0.95,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 4096, // Increased for more detailed explanations
         },
         safetySettings: [
           {
@@ -353,6 +386,8 @@ async function generateAIExplanation(
         'Test the fix thoroughly',
         'Monitor for similar issues'
       ],
+      detectionMethods: parsedExplanation.detectionMethods,
+      securityBestPractices: parsedExplanation.securityBestPractices,
       confidenceScore: parsedExplanation.confidenceScore || 0.8,
       tokensUsed: responseData.usageMetadata?.totalTokenCount || 0,
       processingTime: Date.now() - startTime
@@ -388,6 +423,8 @@ function createFallbackExplanation(rawText: string, vulnerability: ExplanationRe
   let suggestedFix = ''
   let riskAssessment = ''
   let mitigationSteps: string[] = []
+  let detectionMethods = ''
+  let securityBestPractices = ''
   
   // Simple parsing logic to extract different sections
   let currentSection = ''
@@ -403,6 +440,10 @@ function createFallbackExplanation(rawText: string, vulnerability: ExplanationRe
       currentSection = 'risk'
     } else if (lowerLine.includes('step') || lowerLine.includes('action') || lowerLine.includes('mitigation')) {
       currentSection = 'mitigation'
+    } else if (lowerLine.includes('detect') || lowerLine.includes('monitor') || lowerLine.includes('identify')) {
+      currentSection = 'detection'
+    } else if (lowerLine.includes('practice') || lowerLine.includes('prevent') || lowerLine.includes('security best')) {
+      currentSection = 'practices'
     }
     
     // Add content to appropriate section
@@ -421,6 +462,12 @@ function createFallbackExplanation(rawText: string, vulnerability: ExplanationRe
           mitigationSteps.push(line.trim())
         }
         break
+      case 'detection':
+        detectionMethods += line + ' '
+        break
+      case 'practices':
+        securityBestPractices += line + ' '
+        break
     }
   }
   
@@ -433,7 +480,9 @@ function createFallbackExplanation(rawText: string, vulnerability: ExplanationRe
       'Apply security patches if available',
       'Implement proper input validation',
       'Test the fix thoroughly'
-    ]
+    ],
+    detectionMethods: detectionMethods.trim() || 'Monitor logs for unusual access patterns and review code for similar vulnerabilities.',
+    securityBestPractices: securityBestPractices.trim() || 'Follow the principle of least privilege and implement proper input validation and output encoding.'
   }
 }
 
@@ -444,11 +493,14 @@ async function getCachedExplanation(vulnerability: ExplanationRequest['vulnerabi
   try {
     const supabase = createSupabaseClient()
     
+    // Use vulnerability identifier (CVE or GHSA) for cache lookup
+    const vulnerabilityId = vulnerability.cve_id || vulnerability.ghsa_id || 'unknown'
+    
     // Look for existing explanation with similar characteristics
     const { data: existingExplanation } = await supabase
       .from('ai_explanations')
       .select('*')
-      .eq('vulnerability_id', vulnerability.cve_id || 'unknown')
+      .eq('vulnerability_id', vulnerabilityId)
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
@@ -464,6 +516,8 @@ async function getCachedExplanation(vulnerability: ExplanationRequest['vulnerabi
           suggestedFix: existingExplanation.suggested_fix,
           riskAssessment: existingExplanation.risk_assessment || '',
           mitigationSteps: existingExplanation.mitigation_steps || [],
+          detectionMethods: existingExplanation.detection_methods,
+          securityBestPractices: existingExplanation.security_best_practices,
           confidenceScore: existingExplanation.confidence_score || 0.8,
           tokensUsed: existingExplanation.tokens_used || 0,
           processingTime: 0
@@ -489,15 +543,20 @@ async function cacheExplanation(
   try {
     const supabase = createSupabaseClient()
     
+    // Use vulnerability identifier (CVE or GHSA) for cache
+    const vulnerabilityId = vulnerability.cve_id || vulnerability.ghsa_id || 'unknown'
+    
     // Store the explanation in the database
     await supabase
       .from('ai_explanations')
       .insert({
-        vulnerability_id: vulnerability.cve_id || 'unknown',
+        vulnerability_id: vulnerabilityId,
         explanation: explanation.explanation,
         suggested_fix: explanation.suggestedFix,
         risk_assessment: explanation.riskAssessment,
         mitigation_steps: explanation.mitigationSteps,
+        detection_methods: explanation.detectionMethods,
+        security_best_practices: explanation.securityBestPractices,
         ai_model: 'gemini-pro',
         confidence_score: explanation.confidenceScore,
         tokens_used: explanation.tokensUsed,
@@ -534,7 +593,11 @@ async function storeExplanation(
         affected_version: vulnerability.affected_version,
         fixed_version: vulnerability.fixed_version,
         cvss_score: vulnerability.cvss_score,
-        raw_data: { source: 'ai_explanation_request', user_id: userId }
+        raw_data: { 
+          source: 'ai_explanation_request', 
+          user_id: userId,
+          ghsa_id: vulnerability.ghsa_id
+        }
       })
       .select('id')
       .single()
@@ -555,6 +618,8 @@ async function storeExplanation(
         suggested_fix: explanation.suggestedFix,
         risk_assessment: explanation.riskAssessment,
         mitigation_steps: explanation.mitigationSteps,
+        detection_methods: explanation.detectionMethods,
+        security_best_practices: explanation.securityBestPractices,
         ai_model: 'gemini-pro',
         confidence_score: explanation.confidenceScore,
         tokens_used: explanation.tokensUsed,

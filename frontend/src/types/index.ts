@@ -41,6 +41,7 @@ export interface Vulnerability {
   cvss_score?: number
   reference_urls?: string[]
   raw_data: Record<string, any>
+  related_vulnerabilities?: Vulnerability[]
   created_at: string
 }
 
@@ -57,6 +58,32 @@ export interface AIExplanation {
   tokens_used: number
   processing_time_ms: number
   created_at: string
+}
+
+// GHSA Details types
+export interface GHSADetails {
+  id: string
+  ghsa_id: string
+  summary: string
+  description: string
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
+  classifications?: string[]
+  cvss_score?: number
+  cvss_vector?: string
+  published_at?: string
+  updated_at?: string
+  references?: string[]
+  affected_packages?: AffectedPackage[]
+  cve_ids?: string[]
+  vulnerable_functions?: string[]
+  patched_versions?: string[]
+}
+
+export interface AffectedPackage {
+  name: string
+  ecosystem: string
+  affected_versions: string
+  patched_versions?: string
 }
 
 // Scan Session types
@@ -152,6 +179,18 @@ export interface ExplanationResponse {
   error?: string
   statusCode?: number
   message: string
+}
+
+export interface GHSARequest {
+  ghsaId: string
+}
+
+export interface GHSAResponse {
+  success: boolean
+  details?: GHSADetails
+  error?: string
+  statusCode?: number
+  message?: string
 }
 
 // GitHub API types

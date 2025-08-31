@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, Variants, Easing } from 'framer-motion';
 import { cn } from '../../../utils/cn';
 
 interface SecurityScoreGaugeProps {
@@ -83,7 +83,7 @@ const SecurityScoreGauge: React.FC<SecurityScoreGaugeProps> = ({
   const strokeDashoffset = circumference - (score / 100) * circumference;
   
   // Animation variants
-  const scoreVariants = {
+  const scoreVariants: Variants = {
     hidden: { opacity: 0 },
     visible: { 
       opacity: 1,
@@ -91,13 +91,13 @@ const SecurityScoreGauge: React.FC<SecurityScoreGaugeProps> = ({
     }
   };
   
-  const circleVariants = {
+  const circleVariants: Variants = {
     hidden: { strokeDashoffset: circumference },
     visible: { 
       strokeDashoffset,
       transition: { 
         duration: 1.5,
-        ease: "easeOut"
+        ease: "easeOut" as Easing
       }
     }
   };
