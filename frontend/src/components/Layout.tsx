@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Shield, 
   Search, 
@@ -14,69 +13,27 @@ import {
   CheckCircle,
   Clock,
   Zap,
-  Home,
-  Bell,
-  HelpCircle,
-  User,
-  ExternalLink,
-  ChevronRight
+  Moon,
+  Sun
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { useTheme } from '../hooks/useTheme'
 import { cn } from '../utils/cn'
+import ThemeToggle from './ui/ThemeToggle'
 
 const Layout: React.FC = () => {
   const { user, signOut } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [notifications, setNotifications] = useState(3)
-  const [showNotificationBadge, setShowNotificationBadge] = useState(true)
-  const [currentTime, setCurrentTime] = useState(new Date())
-  const [pageTitle, setPageTitle] = useState('')
-  const [scrolled, setScrolled] = useState(false)
-  
+
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: BarChart3, description: 'Security overview and stats' },
-    { name: 'Scan Repository', href: '/scan', icon: Search, description: 'Analyze new repositories' },
-    { name: 'Vulnerabilities', href: '/vulnerabilities', icon: AlertTriangle, description: 'View and manage issues' },
-    { name: 'Settings', href: '/profile', icon: Settings, description: 'User preferences and account' },
+    { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
+    { name: 'Scan Repository', href: '/scan', icon: Search },
+    { name: 'Vulnerabilities', href: '/vulnerabilities', icon: AlertTriangle },
+    { name: 'Settings', href: '/profile', icon: Settings },
   ]
-  
-  // Update page title based on the current route
-  useEffect(() => {
-    const path = location.pathname
-    const routeMatch = navigation.find(item => item.href === path)
-    if (routeMatch) {
-      setPageTitle(routeMatch.name)
-    } else {
-      setPageTitle('Dashboard')
-    }
-    
-    // Close sidebar on route change (mobile)
-    if (sidebarOpen) {
-      setSidebarOpen(false)
-    }
-  }, [location.pathname])
-  
-  // Handle scroll events
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 10)
-    }
-    
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
-  
-  // Update the time every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(new Date())
-    }, 60000)
-    
-    return () => clearInterval(interval)
-  }, [])
-  
+
   const handleSignOut = async () => {
     try {
       await signOut()
@@ -85,348 +42,180 @@ const Layout: React.FC = () => {
       console.error('Sign out error:', error)
     }
   }
-  
+
   const isActive = (href: string) => {
     return location.pathname === href
   }
-  
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-  
-  // Animation variants
-  const sidebarVariants = {
-    open: {
-      x: 0,
-      opacity: 1,
-      transition: {
-        type: "spring",
-        stiffness: 300,
-        damping: 30
-      }
-    },
-    closed: {
-      x: "-100%",
-      opacity: 0.5,
-      transition: {
-        type: "spring",
-        stiffness: 300,
-        damping: 30
-      }
-    }
-  }
-  
-  const navItemVariants = {
-    hidden: { opacity: 0, x: -20 },
-    visible: (i: number) => ({
-      opacity: 1,
-      x: 0,
-      transition: {
-        delay: i * 0.1,
-        duration: 0.5
-      }
-    })
-  }
-  
+
+  // Determine page title based on current route
+  const pageTitle = (() => {
+    const path = location.pathname
+    if (path.startsWith('/dashboard') || path === '/') return 'Dashboard'
+    if (path.startsWith('/scan')) return 'Scan Repository'
+    if (path.startsWith('/vulnerabilities')) return 'Vulnerabilities'
+    if (path.startsWith('/vulnerability/')) return 'Vulnerability Details'
+    if (path.startsWith('/profile')) return 'Settings'
+    return 'LockDown'
+  })()
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-dark-text">
       {/* Animated background */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute -top-64 -right-32 h-[500px] w-[500px] rounded-full bg-gradient-radial from-primary-300/20 via-primary-200/10 to-transparent opacity-60 animate-pulse-slow" />
-        <div className="absolute top-1/2 -left-32 h-96 w-96 rounded-full bg-gradient-radial from-primary-200/10 via-primary-100/10 to-transparent opacity-40 animate-pulse-slow" />
+        <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-primary-300/30 dark:bg-primary-800/20 opacity-30 blur-3xl animate-pulse-slow" />
+        <div className="absolute top-1/2 -left-24 h-64 w-64 rounded-full bg-primary-200/40 dark:bg-primary-700/20 opacity-40 blur-3xl animate-pulse-slow" />
       </div>
-      
       {/* Mobile sidebar overlay */}
-      <AnimatePresence>
-        {sidebarOpen && (
-          <motion.div 
-            className="fixed inset-0 z-40 bg-slate-800/50 backdrop-blur-sm lg:hidden"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-slate-800/50 dark:bg-slate-900/80 backdrop-blur-sm lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* Sidebar */}
-      <motion.div 
-        variants={sidebarVariants}
-        initial="closed"
-        animate={sidebarOpen ? "open" : "closed"}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        style={{ transform: undefined }}
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 w-72 bg-white/80 shadow-xl backdrop-blur-md transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 border-r border-slate-200/70",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
+      <div className={cn(
+        "fixed inset-y-0 left-0 z-50 w-64 md:w-72 bg-white/90 dark:bg-dark-card/90 backdrop-blur-md shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 border-r border-slate-200/70 dark:border-dark-border",
+        sidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
         <div className="flex h-full flex-col">
           {/* Logo and header */}
-          <div className="flex h-20 items-center justify-between px-6 border-b border-slate-200/70">
-            <motion.div 
-              className="flex items-center space-x-3"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 shadow-md shadow-primary-400/20">
-                <Shield className="h-6 w-6 text-white" />
+          <div className="flex h-16 md:h-20 items-center justify-between px-4 sm:px-6 border-b border-slate-200/70 dark:border-dark-border">
+            <div className="flex items-center space-x-3">
+              <div className="flex h-9 w-9 md:h-10 md:w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 shadow-md shadow-primary-600/20">
+                <Shield className="h-5 w-5 md:h-6 md:w-6 text-white" />
               </div>
-              <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-primary-800">LockDown</span>
-            </motion.div>
+              <span className="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-primary-800 dark:from-primary-400 dark:to-primary-600">LockDown</span>
+            </div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden rounded-full p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100/70 transition-colors"
-              aria-label="Close sidebar"
+              className="lg:hidden rounded-full p-1.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          {/* User section - At the top for better UX */}
-          <div className="p-4 border-b border-slate-200/70">
-            <div className="bg-gradient-to-r from-primary-50 to-slate-50 p-3 rounded-xl flex items-center space-x-3">
-              <motion.div
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <img
-                  className="h-10 w-10 rounded-full object-cover border-2 border-primary-200 shadow-md"
-                  src={user?.github_avatar_url || '/default-avatar.png'}
-                  alt={user?.github_username || 'User'}
-                  loading="lazy"
-                />
-              </motion.div>
+          {/* Navigation */}
+          <nav className="flex-1 space-y-1 px-3 py-4">
+            {navigation.map((item) => {
+              const Icon = item.icon
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={cn(
+                    "group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors",
+                    isActive(item.href)
+                      ? "bg-primary-100/70 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400"
+                      : "text-slate-600 dark:text-slate-300 hover:bg-slate-100/70 dark:hover:bg-slate-800/30 hover:text-slate-900 dark:hover:text-white"
+                  )}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <div className={cn(
+                    "mr-3 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md transition-colors",
+                    isActive(item.href)
+                      ? "bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400"
+                      : "bg-slate-100/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-white"
+                  )}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span>{item.name}</span>
+                </Link>
+              )
+            })}
+          </nav>
+
+          {/* User section */}
+          <div className="border-t border-slate-200/70 dark:border-dark-border p-4">
+            <div className="bg-gradient-to-r from-slate-50 to-primary-50/20 dark:from-slate-800/50 dark:to-primary-900/20 p-3 rounded-xl flex items-center space-x-3">
+              <img
+                className="h-9 w-9 rounded-full object-cover border-2 border-slate-200 dark:border-slate-700 shadow-sm"
+                src={user?.github_avatar_url || '/default-avatar.png'}
+                alt={user?.github_username || 'User'}
+                loading="lazy"
+              />
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-slate-900 truncate">
+                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
                   {user?.github_username || 'User'}
                 </p>
-                <p className="text-xs text-slate-500 truncate mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   {user?.github_email || 'No email'}
                 </p>
               </div>
-              <div className="flex items-center space-x-2">
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => navigate('/profile')}
-                  className="p-1.5 rounded-full bg-white/80 text-slate-500 hover:text-primary-600 shadow-sm transition-colors"
-                  aria-label="User profile"
-                >
-                  <User className="h-4 w-4" />
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
+              <div className="flex items-center">
+                <button
                   onClick={handleSignOut}
-                  className="p-1.5 rounded-full bg-white/80 text-slate-500 hover:text-red-600 shadow-sm transition-colors"
-                  aria-label="Sign out"
+                  className="p-1.5 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 shadow-sm transition-colors"
+                  title="Sign out"
                 >
                   <LogOut className="h-4 w-4" />
-                </motion.button>
+                </button>
               </div>
             </div>
-          </div>
-
-          {/* Navigation */}
-          <motion.nav 
-            className="flex-1 overflow-y-auto custom-scrollbar"
-            initial="hidden"
-            animate="visible"
-          >
-            <div className="px-3 py-5 space-y-1.5">
-              <div className="px-3 mb-4 text-sm font-medium text-slate-400 uppercase tracking-wider">
-                Main Menu
-              </div>
-              {navigation.map((item, i) => {
-                const Icon = item.icon
-                return (
-                  <motion.div
-                    key={item.name}
-                    custom={i}
-                    variants={navItemVariants}
-                  >
-                    <Link
-                      to={item.href}
-                      className={cn(
-                        "nav-link py-3 group",
-                        isActive(item.href)
-                          ? "nav-link-active"
-                          : "nav-link-inactive"
-                      )}
-                      onClick={() => setSidebarOpen(false)}
-                    >
-                      <div className={cn(
-                        "mr-3 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg transition-colors",
-                        isActive(item.href)
-                          ? "bg-primary-100 text-primary-700"
-                          : "bg-slate-100/50 text-slate-500 group-hover:bg-slate-200/50 group-hover:text-slate-700"
-                      )}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between items-center">
-                          <span>{item.name}</span>
-                          {isActive(item.href) && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              transition={{ type: "spring", stiffness: 500, damping: 15 }}
-                            >
-                              <ChevronRight className="h-4 w-4 text-primary-600" />
-                            </motion.div>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5 group-hover:text-slate-700">
-                          {item.description}
-                        </p>
-                      </div>
-                    </Link>
-                  </motion.div>
-                )
-              })}
-            </div>
-            
-            {/* Help and support section */}
-            <div className="px-3 py-4 mb-6">
-              <div className="p-4 rounded-xl bg-gradient-to-br from-primary-50 to-primary-100/30 border border-primary-200/50">
-                <div className="flex items-center space-x-2 mb-3">
-                  <HelpCircle className="h-5 w-5 text-primary-600" />
-                  <h3 className="font-medium text-primary-900">Need Help?</h3>
-                </div>
-                <p className="text-xs text-slate-700 mb-3">
-                  Get support with setting up scans or interpreting vulnerability results.
-                </p>
-                <motion.a
-                  href="#"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="btn-outline text-xs flex items-center justify-center py-1.5 px-3 w-full"
-                >
-                  <span>View Documentation</span>
-                  <ExternalLink className="ml-1.5 h-3 w-3" />
-                </motion.a>
-              </div>
-            </div>
-          </motion.nav>
-
-          {/* Bottom decoration */}
-          <div className="p-5 text-center border-t border-slate-200/70">
-            <div className="flex items-center justify-center space-x-2 text-sm text-slate-500">
-              <Clock className="h-4 w-4 text-slate-400" />
-              <span>{formatTime(currentTime)}</span>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              System Status: <span className="text-security-safe">Online</span>
-            </p>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Main content */}
-      <div className="lg:pl-72">
+      <div className="lg:pl-64 md:pl-72">
         {/* Top bar */}
-        <div 
-          className={cn(
-            "sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/70 transition-shadow duration-300",
-            scrolled && "shadow-sm"
-          )}
-        >
-          <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="sticky top-0 z-30 bg-white/80 dark:bg-dark-card/80 backdrop-blur-md shadow-sm border-b border-slate-200/70 dark:border-dark-border">
+          <div className="flex h-16 md:h-20 items-center justify-between px-3 sm:px-6 lg:px-8">
             <div className="flex items-center">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden rounded-xl p-2.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100/80 transition-colors mr-3"
+                className="lg:hidden rounded-xl p-2 md:p-2.5 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/50 transition-colors mr-3"
                 aria-label="Open menu"
               >
                 <Menu className="h-5 w-5" />
               </button>
               
               <div>
-                <h1 className="text-lg sm:text-xl font-bold text-slate-900">{pageTitle}</h1>
-                <div className="flex items-center text-sm text-slate-500">
+                <h1 className="text-base md:text-lg font-bold text-slate-900 dark:text-white">{pageTitle}</h1>
+                <div className="flex items-center text-xs md:text-sm text-slate-500 dark:text-slate-400">
                   <span className="hidden sm:inline">Current location:</span>
-                  <span className="ml-1 font-medium text-primary-600">{pageTitle}</span>
+                  <span className="ml-1 font-medium text-primary-600 dark:text-primary-400">{pageTitle}</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 md:space-x-4">
               {/* Status indicators */}
-              <div className="hidden sm:flex items-center space-x-4">
-                <motion.div 
-                  className="flex items-center space-x-2 text-sm text-slate-600 px-3 py-1.5 rounded-full bg-slate-50"
-                  whileHover={{ scale: 1.05 }}
-                >
-                  <motion.div 
-                    className="h-2 w-2 rounded-full bg-security-safe"
-                    animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
+              <div className="hidden md:flex items-center space-x-2 lg:space-x-4">
+                <div className="flex items-center space-x-1 md:space-x-2 text-xs md:text-sm text-slate-600 dark:text-slate-300 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-slate-50 dark:bg-slate-800/50">
+                  <div className="h-1.5 md:h-2 w-1.5 md:w-2 rounded-full bg-security-safe"></div>
                   <span>System Online</span>
-                </motion.div>
-                <motion.div 
-                  className="flex items-center space-x-2 text-sm text-slate-600 px-3 py-1.5 rounded-full bg-slate-50"
-                  whileHover={{ scale: 1.05 }}
-                >
-                  <Zap className="h-4 w-4 text-accent-amber" />
+                </div>
+                <div className="hidden lg:flex items-center space-x-1 md:space-x-2 text-xs md:text-sm text-slate-600 dark:text-slate-300 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-slate-50 dark:bg-slate-800/50">
+                  <Zap className="h-3 md:h-4 w-3 md:w-4 text-amber-500" />
                   <span>AI Ready</span>
-                </motion.div>
+                </div>
               </div>
 
-              {/* Notification bell */}
-              <motion.div
-                className="relative"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <button
-                  className="rounded-xl p-2.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100/80 transition-colors"
-                  onClick={() => setShowNotificationBadge(false)}
-                >
-                  <Bell className="h-5 w-5" />
-                </button>
-                {showNotificationBadge && notifications > 0 && (
-                  <motion.div 
-                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full bg-security-critical text-white text-xs font-medium"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 15 }}
-                  >
-                    {notifications}
-                  </motion.div>
-                )}
-              </motion.div>
+              {/* Theme toggle */}
+              <ThemeToggle variant="icon" size="sm" className="md:hidden" />
+              <ThemeToggle variant="icon" size="md" className="hidden md:flex" />
 
               {/* GitHub link */}
-              <motion.a
+              <a
                 href="https://github.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-xl p-2.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100/80 transition-colors"
+                className="rounded-xl p-2 md:p-2.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/50 transition-colors"
                 title="GitHub"
-                whileHover={{ scale: 1.1, rotate: [0, -10, 10, -10, 0] }}
-                whileTap={{ scale: 0.95 }}
               >
-                <Github className="h-5 w-5" />
-              </motion.a>
+                <Github className="h-4 md:h-5 w-4 md:w-5" />
+              </a>
             </div>
           </div>
         </div>
 
-        {/* Page content with motion transitions */}
-        <motion.main 
-          className="py-6"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        {/* Page content */}
+        <main className="py-4 md:py-6">
+          <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
             <Outlet />
           </div>
-        </motion.main>
+        </main>
       </div>
     </div>
   )

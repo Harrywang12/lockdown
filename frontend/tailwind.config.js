@@ -7,29 +7,39 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Enhanced security-focused color palette
+        // Security-focused color palette
         primary: {
-          50: '#eef7ff',
-          100: '#d9eeff',
-          200: '#bce3ff',
-          300: '#8ad6ff',
-          400: '#4cbfff',
-          500: '#26a4fc',
-          600: '#1085f3',
-          700: '#0d6cde',
-          800: '#1058b4',
-          900: '#134a91',
-          950: '#102e58',
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
         },
         security: {
-          critical: '#ee2d4e',
-          high: '#f46e37',
-          medium: '#f5a524',
-          low: '#2ab05d',
-          safe: '#09b876',
+          critical: '#dc2626',
+          high: '#ea580c',
+          medium: '#d97706',
+          low: '#65a30d',
+          safe: '#16a34a',
         },
-        // Using slate instead of gray for more elegant look
-        slate: {
+        gray: {
+          50: '#f9fafb',
+          100: '#f3f4f6',
+          200: '#e5e7eb',
+          300: '#d1d5db',
+          400: '#9ca3af',
+          500: '#6b7280',
+          600: '#4b5563',
+          700: '#374151',
+          800: '#1f2937',
+          900: '#111827',
+        },
+        dark: {
           50: '#f8fafc',
           100: '#f1f5f9',
           200: '#e2e8f0',
@@ -40,32 +50,17 @@ export default {
           700: '#334155',
           800: '#1e293b',
           900: '#0f172a',
-          950: '#020617',
-        },
-        // Accent colors
-        accent: {
-          indigo: '#4f46e5',
-          purple: '#8b5cf6',
-          pink: '#ec4899',
-          teal: '#14b8a6',
-          amber: '#f59e0b',
-        },
+        }
       },
       fontFamily: {
-        sans: ['Manrope', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in-out',
         'slide-up': 'slideUp 0.3s ease-out',
-        'slide-down': 'slideDown 0.3s ease-out',
-        'slide-left': 'slideLeft 0.3s ease-out',
-        'slide-right': 'slideRight 0.3s ease-out',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'bounce-slow': 'bounce 2s infinite',
-        'float': 'float 6s ease-in-out infinite',
-        'spin-slow': 'spin 3s linear infinite',
-        'ping-slow': 'ping 3s cubic-bezier(0, 0, 0.2, 1) infinite',
       },
       keyframes: {
         fadeIn: {
@@ -73,46 +68,16 @@ export default {
           '100%': { opacity: '1' },
         },
         slideUp: {
-          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '0%': { transform: 'translateY(10px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
-        slideDown: {
-          '0%': { transform: 'translateY(-20px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
-        slideLeft: {
-          '0%': { transform: 'translateX(20px)', opacity: '0' },
-          '100%': { transform: 'translateX(0)', opacity: '1' },
-        },
-        slideRight: {
-          '0%': { transform: 'translateX(-20px)', opacity: '0' },
-          '100%': { transform: 'translateX(0)', opacity: '1' },
-        },
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-10px)' },
         },
       },
       boxShadow: {
         'security': '0 4px 6px -1px rgba(220, 38, 38, 0.1), 0 2px 4px -1px rgba(220, 38, 38, 0.06)',
-        'glow': '0 0 20px rgba(38, 164, 252, 0.3)',
-        'glow-lg': '0 0 30px rgba(38, 164, 252, 0.4)',
-        'soft': '0 3px 10px rgba(15, 23, 42, 0.08)',
-        'card': '0 8px 24px rgba(0, 0, 0, 0.05)',
-        'card-hover': '0 12px 32px rgba(0, 0, 0, 0.1)',
+        'glow': '0 0 20px rgba(59, 130, 246, 0.3)',
       },
       backdropBlur: {
         xs: '2px',
-        md: '6px',
-        lg: '12px',
-      },
-      borderRadius: {
-        '4xl': '2rem',
-        '5xl': '2.5rem',
-      },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
       },
     },
   },

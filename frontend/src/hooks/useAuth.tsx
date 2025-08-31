@@ -122,6 +122,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: { session: initialSession } } = await supabase.auth.getSession()
         setSession(initialSession)
 
+        // Require real authentication in all modes
+        if (!initialSession || !initialSession.user) {
+          setUser(null)
+          setLoading(false)
+          return
+        }
+
         if (initialSession?.user) {
           const userData = await fetchUserData(initialSession.user)
           if (userData) {

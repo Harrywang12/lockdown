@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import { cn } from '../../utils/cn';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -9,7 +8,6 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   fullWidth?: boolean;
-  animated?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -22,7 +20,6 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     rightIcon,
     fullWidth = false,
     className,
-    animated = true,
     ...props
   }, ref) => {
     const variantClasses = {
@@ -40,48 +37,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'px-6 py-3 text-base',
     };
 
-    const baseClasses = 'rounded-lg font-medium inline-flex items-center justify-center transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden';
-
-    // Animation variants
-    const buttonVariants = {
-      tap: { scale: 0.98 },
-      hover: { scale: 1.02 }
-    };
-
-    // Ripple effect animation
-    const [coords, setCoords] = React.useState({ x: -1, y: -1 });
-    const [isRippling, setIsRippling] = React.useState(false);
-
-    React.useEffect(() => {
-      if (coords.x !== -1 && coords.y !== -1) {
-        setIsRippling(true);
-        setTimeout(() => setIsRippling(false), 500);
-      } else {
-        setIsRippling(false);
-      }
-    }, [coords]);
-
-    React.useEffect(() => {
-      if (!isRippling) setCoords({ x: -1, y: -1 });
-    }, [isRippling]);
-
-    const handleRipple = (e: React.MouseEvent<HTMLButtonElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      setCoords({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-      });
-    };
-
-    // Don't animate if animated prop is false
-    const motionProps = animated ? {
-      whileHover: "hover",
-      whileTap: "tap",
-      variants: buttonVariants,
-    } : {};
+    const baseClasses = 'rounded-lg font-medium inline-flex items-center justify-center transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden hover:scale-[1.02] active:scale-[0.98]';
 
     return (
-      <motion.button
+      <button
         ref={ref}
         className={cn(
           baseClasses,
@@ -91,24 +50,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           className
         )}
         disabled={isLoading || props.disabled}
-        onClick={(e) => {
-          handleRipple(e);
-          if (props.onClick) props.onClick(e);
-        }}
-        {...motionProps}
         {...props}
       >
-        {/* Ripple effect */}
-        {isRippling && animated && (
-          <span
-            className="absolute rounded-full bg-white/30 animate-ripple"
-            style={{
-              left: coords.x,
-              top: coords.y
-            }}
-          />
-        )}
-
         {/* Loading spinner */}
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-inherit rounded-lg">
@@ -122,7 +65,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           {children}
           {rightIcon && <span className="ml-2">{rightIcon}</span>}
         </div>
-      </motion.button>
+      </button>
     );
   }
 );
