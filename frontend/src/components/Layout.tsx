@@ -36,10 +36,14 @@ const Layout: React.FC = () => {
 
   const handleSignOut = async () => {
     try {
+      console.log('Sign out button clicked')
       await signOut()
+      console.log('Sign out successful, navigating to login')
       navigate('/login')
     } catch (error) {
       console.error('Sign out error:', error)
+      // Force navigation to login regardless of sign out success
+      navigate('/login')
     }
   }
 

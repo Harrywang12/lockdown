@@ -219,20 +219,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sign out
   const signOut = useCallback(async () => {
     try {
+      console.log('Starting sign out process...')
       setLoading(true)
       
+      // Check if we have a valid session first
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        console.log('No active session found, clearing local state only')
+        setUser(null)
+        setSession(null)
+        return
+      }
+      
+      // Try to sign out from Supabase
       const { error } = await supabase.auth.signOut()
       
       if (error) {
-        console.error('Sign out error:', error)
-        throw error
+        console.error('Supabase sign out error:', error)
+        // Even if Supabase sign out fails, clear local state
+        setUser(null)
+        setSession(null)
+        return
       }
       
+      console.log('Supabase sign out successful, clearing local state')
       setUser(null)
       setSession(null)
+      
+      // Clear any remaining auth data from storage
+      try {
+        localStorage.removeItem('supabase.auth.token')
+        sessionStorage.clear()
+        console.log('Local storage cleared')
+      } catch (storageError) {
+        console.log('Could not clear storage:', storageError)
+      }
+      
+      console.log('Sign out completed successfully')
     } catch (error) {
       console.error('Sign out error:', error)
-      throw error
+      // Always clear local state even if there's an error
+      setUser(null)
+      setSession(null)
     } finally {
       setLoading(false)
     }

@@ -43,7 +43,15 @@ const ScanRepository: React.FC = () => {
       navigate('/dashboard')
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to initiate scan')
+      if (error.message.includes('authentication') || error.message.includes('token')) {
+        toast.error('Authentication expired. Please sign in again.')
+        // Redirect to login after a short delay
+        setTimeout(() => {
+          window.location.href = '/login'
+        }, 2000)
+      } else {
+        toast.error(error.message || 'Failed to initiate scan')
+      }
     }
   })
 

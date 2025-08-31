@@ -23,6 +23,23 @@ const API_ENDPOINTS = {
 const getAuthHeaders = async () => {
   const { data: { session } } = await supabase.auth.getSession()
   
+  // Try to refresh the session if it's expired
+  if (session && session.expires_at && Date.now() / 1000 > session.expires_at) {
+    console.log('Session expired, attempting refresh...')
+    const { data: { session: refreshedSession }, error } = await supabase.auth.refreshSession()
+    if (error) {
+      console.error('Failed to refresh session:', error)
+      throw new Error('Session expired and refresh failed. Please sign in again.')
+    }
+    if (!refreshedSession?.access_token) {
+      throw new Error('No authentication token available after refresh')
+    }
+    return {
+      'Authorization': `Bearer ${refreshedSession.access_token}`,
+      'Content-Type': 'application/json',
+    }
+  }
+  
   if (!session?.access_token) {
     throw new Error('No authentication token available')
   }
