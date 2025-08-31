@@ -206,11 +206,14 @@ Deno.serve(async (request: Request) => {
       console.log('Fetching repository manifests from GitHub...')
       const branch = requestBody.branch || 'main'
       const githubToken = await getUserGitHubToken(supabase, user.id)
+      console.log('GitHub token available:', !!githubToken)
       const manifests = await fetchRepositoryManifests(repoInfo.owner, repoInfo.repo, branch, githubToken)
+      console.log('Manifests found:', Object.keys(manifests))
 
       // Build OSV queries from manifests
       const queries = buildOsvQueriesFromManifests(manifests)
       console.log('Total dependency queries:', queries.length)
+      console.log('Sample queries:', queries.slice(0, 3))
 
       // Create scan session (pending). Let DB generate UUID id.
       console.log('Creating scan session (pending)')
@@ -266,6 +269,7 @@ Deno.serve(async (request: Request) => {
 
       // Call OSV batch API
       console.log('Calling OSV batch API...')
+      console.log('OSV queries being sent:', JSON.stringify(queries.slice(0, 3), null, 2))
       const osvResponse = await fetch(OSV_BATCH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -277,6 +281,8 @@ Deno.serve(async (request: Request) => {
         throw new Error(`OSV API failed: ${osvResponse.status}`)
       }
       const osvData: { results: Array<{ vulns?: OsvVuln[] }> } = await osvResponse.json()
+      console.log(`OSV returned ${osvData.results.length} results`)
+      console.log('OSV results sample:', JSON.stringify(osvData.results.slice(0, 2), null, 2))
 
       // Persist vulnerabilities
       console.log('Persisting vulnerabilities...')

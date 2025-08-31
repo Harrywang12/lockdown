@@ -81,23 +81,46 @@ const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
 // Enhanced security-focused prompt template for improved vulnerability explanation
 const VULNERABILITY_PROMPT_TEMPLATE = `You are a highly experienced cybersecurity expert specializing in software vulnerability analysis, remediation, and security architecture. Your task is to provide a comprehensive analysis of the security vulnerability described below.
 
+IMPORTANT: You are analyzing a real security vulnerability. Provide specific, actionable, and accurate information. Do not give generic responses. If you have detailed information about the vulnerability, use it to provide concrete guidance.
+
 Please analyze the following security vulnerability and provide a detailed, actionable response with:
 
-1. **Clear Explanation**: Explain what this vulnerability is, how it works, and why it's dangerous in simple terms that a student developer can understand. Include specific attack vectors and exploitation techniques when relevant.
+1. **Clear Explanation**: Explain what this vulnerability is, how it works, and why it's dangerous. Be specific about:
+   - The exact mechanism of the vulnerability
+   - How attackers could exploit it
+   - What systems or data could be compromised
+   - Real-world examples if available
 
-2. **Suggested Fix**: Provide specific, actionable code examples or configuration changes to fix this vulnerability. Include before/after code examples when possible, with comments explaining the changes.
+2. **Suggested Fix**: Provide specific, actionable code examples or configuration changes to fix this vulnerability. Include:
+   - Exact code changes needed
+   - Version updates required
+   - Configuration modifications
+   - Before/after examples with comments
 
-3. **Risk Assessment**: Explain the potential impact and risk level of this vulnerability. Include discussion of:
+3. **Risk Assessment**: Provide a detailed risk analysis including:
+   - Specific attack scenarios and their likelihood
    - Potential data exposure or system compromise
-   - Likelihood of exploitation in the wild
-   - Business impact and regulatory concerns
-   - Whether this vulnerability could be part of a larger attack chain
+   - Business impact (data loss, service disruption, compliance issues)
+   - Whether this could be part of a larger attack chain
+   - Exploitation complexity and prerequisites
 
-4. **Mitigation Steps**: List 3-5 specific steps to address this vulnerability, including immediate actions and long-term preventive measures. Prioritize these steps clearly.
+4. **Mitigation Steps**: List 5-7 specific, prioritized steps:
+   - Immediate actions (within 24 hours)
+   - Short-term fixes (within a week)
+   - Long-term preventive measures
+   - Monitoring and detection steps
 
-5. **Detection Methods**: Explain how to identify if this vulnerability has been exploited and how to monitor for future occurrences.
+5. **Detection Methods**: Explain how to:
+   - Identify if this vulnerability exists in your codebase
+   - Detect if it has been exploited
+   - Monitor for future exploitation attempts
+   - Set up automated scanning and alerts
 
-6. **Security Best Practices**: Provide related security best practices to prevent similar vulnerabilities in the future.
+6. **Security Best Practices**: Provide specific best practices to prevent similar vulnerabilities, including:
+   - Code review guidelines
+   - Testing strategies
+   - Dependency management practices
+   - Security scanning tools and configurations
 
 **Vulnerability Details:**
 - Title: {title}
@@ -109,26 +132,32 @@ Please analyze the following security vulnerability and provide a detailed, acti
 - GHSA ID: {ghsa_id || 'Not specified'}
 - CVSS Score: {cvss_score || 'Not specified'}
 
+**GHSA Details (if available):**
+{ghsa_details}
+
 **Context:**
 - Repository: {repository || 'Not specified'}
 - Language/Framework: {language || 'Not specified'}
 
-If this is an exposed API key or credential, emphasize the urgency of rotation and revocation.
-If this is a known CVE or GHSA, include specific information about exploitability and patch availability.
-If this is a misconfiguration, explain secure configuration patterns for the affected system.
+SPECIAL INSTRUCTIONS:
+- If this is a GHSA vulnerability, use the detailed GHSA information to provide specific guidance about affected versions, patched versions, and exact remediation steps.
+- If this is a dependency vulnerability, provide exact version numbers and update commands.
+- If this is a code vulnerability, provide specific code examples and patterns to avoid.
+- If this is a configuration issue, provide exact configuration changes needed.
+- Always prioritize actionable, specific advice over generic statements.
 
 Please format your response as JSON with the following structure:
 {
-  "explanation": "Clear, detailed explanation of the vulnerability with attack vectors",
-  "suggestedFix": "Specific fix with code examples and comments",
-  "riskAssessment": "Comprehensive risk analysis including impact and exploitation likelihood",
-  "mitigationSteps": ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"],
-  "detectionMethods": "Ways to identify exploitation and monitor for this vulnerability",
-  "securityBestPractices": "Related preventive measures and security patterns",
+  "explanation": "Detailed explanation of the vulnerability with specific attack vectors and mechanisms",
+  "suggestedFix": "Specific fix with exact code examples, version updates, or configuration changes",
+  "riskAssessment": "Comprehensive risk analysis with specific attack scenarios and business impact",
+  "mitigationSteps": ["Immediate action 1", "Short-term fix 2", "Long-term measure 3", "Monitoring step 4", "Prevention step 5"],
+  "detectionMethods": "Specific ways to detect this vulnerability and monitor for exploitation",
+  "securityBestPractices": "Specific best practices to prevent similar vulnerabilities",
   "confidenceScore": 0.95
 }
 
-Provide the most thorough, accurate, and actionable guidance possible, with specific examples tailored to the vulnerability type and affected component.`
+Provide the most thorough, accurate, and actionable guidance possible. Be specific and avoid generic statements.`
 
 /**
  * Main handler for the explain endpoint

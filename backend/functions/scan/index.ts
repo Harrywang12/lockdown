@@ -80,7 +80,7 @@ interface DependencyInfo {
   last_updated?: string
 }
 
-// Security scoring weights
+// Security scoring weights (updated)
 const SECURITY_WEIGHTS = {
   CRITICAL: -25,
   HIGH: -15,
@@ -234,9 +234,23 @@ async function performVulnerabilityScan(
     
     // Perform vulnerability detection
     const vulnerabilities = await detectVulnerabilities(repoInfo, branch, scanType, githubToken)
+    console.log(`=== SCAN RESULTS ===`)
+    console.log(`Total vulnerabilities found: ${vulnerabilities.length}`)
+    console.log(`Vulnerability breakdown:`, {
+      critical: vulnerabilities.filter(v => v.severity === 'CRITICAL').length,
+      high: vulnerabilities.filter(v => v.severity === 'HIGH').length,
+      medium: vulnerabilities.filter(v => v.severity === 'MEDIUM').length,
+      low: vulnerabilities.filter(v => v.severity === 'LOW').length
+    })
+    console.log(`Sample vulnerabilities:`, vulnerabilities.slice(0, 3).map(v => ({
+      title: v.title,
+      severity: v.severity,
+      source: v.raw_data?.source
+    })))
     
     // Calculate security metrics
     const securityMetrics = calculateSecurityMetrics(vulnerabilities)
+    console.log(`Security score: ${securityMetrics.securityScore}`)
     
     // Store vulnerabilities in database
     await storeVulnerabilities(supabase, scanSessionId, repositoryId, vulnerabilities)
@@ -440,24 +454,12 @@ async function scanWithSnyk(
   }
   
   try {
-    // Snyk API integration would go here
-    // For MVP, we'll simulate the response
     console.log(`Scanning ${repoInfo.owner}/${repoInfo.repo} with Snyk API`)
     
-    // Simulated vulnerability data
-    return [
-      {
-        id: generateSecureId(),
-        vulnerability_type: 'dependency',
-        severity: 'HIGH',
-        title: 'Outdated package with known vulnerabilities',
-        description: 'Package lodash@4.17.15 has known security vulnerabilities',
-        affected_component: 'lodash',
-        affected_version: '4.17.15',
-        fixed_version: '4.17.21',
-        raw_data: { source: 'snyk', package: 'lodash' }
-      }
-    ]
+    // TODO: Implement real Snyk API integration
+    // For now, return empty array to avoid simulated data
+    console.log('Snyk API integration not yet implemented, skipping')
+    return []
     
   } catch (error) {
     console.error('Snyk API error:', error)
@@ -474,10 +476,14 @@ async function scanWithOSV(
   githubToken?: string
 ): Promise<Vulnerability[]> {
   try {
+    console.log(`=== OSV SCAN START (DEBUG) ===`)
     console.log(`Scanning ${repoInfo.owner}/${repoInfo.repo} with OSV.dev API`)
+    console.log(`GitHub token provided: ${githubToken ? 'Yes' : 'No'}`)
 
     // 1) Fetch dependency manifests from GitHub
     const manifests = await fetchDependencyManifests(repoInfo, branch, githubToken)
+    console.log(`Found ${manifests.length} manifest files:`, manifests.map(m => m.path))
+    
     if (manifests.length === 0) {
       console.log('No supported dependency manifests found. Skipping OSV scan.')
       return []
@@ -485,12 +491,16 @@ async function scanWithOSV(
 
     // 2) Parse manifests into package queries for OSV
     const queries = buildOSVQueriesFromManifests(manifests)
+    console.log(`Generated ${queries.length} package queries for OSV`)
+    console.log('Sample queries:', queries.slice(0, 3))
+    
     if (queries.length === 0) {
       console.log('No dependency queries constructed for OSV. Skipping.')
       return []
     }
 
     // 3) Call OSV batch API
+    console.log('Calling OSV.dev batch API...')
     const osvResp = await fetch('https://api.osv.dev/v1/querybatch', {
       method: 'POST',
       headers: {
@@ -498,12 +508,18 @@ async function scanWithOSV(
       },
       body: JSON.stringify({ queries })
     })
+    
+    console.log(`OSV API response status: ${osvResp.status}`)
+    
     if (!osvResp.ok) {
-      console.error('OSV.dev API error status:', osvResp.status, await safeReadText(osvResp))
+      const errorText = await safeReadText(osvResp)
+      console.error('OSV.dev API error status:', osvResp.status, errorText)
       return []
     }
+    
     const osvData = await osvResp.json()
     const results = Array.isArray(osvData.results) ? osvData.results : []
+    console.log(`OSV returned ${results.length} results`)
 
     // 4) Convert OSV results to our Vulnerability model
     const vulnerabilities: Vulnerability[] = []
@@ -558,6 +574,8 @@ async function fetchDependencyManifests(
   branch: string,
   githubToken?: string
 ): Promise<Array<{ path: string; content: string }>> {
+  console.log(`Fetching manifests for ${repoInfo.owner}/${repoInfo.repo}@${branch}`)
+  
   const hdrs: Record<string,string> = { 'User-Agent': 'LockDown-Scanner' }
   if (githubToken) hdrs['Authorization'] = `token ${githubToken}`
 
@@ -578,16 +596,22 @@ async function fetchDependencyManifests(
   for (const p of candidatePaths) {
     try {
       const url = `https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${branch}/${p}`
+      console.log(`Trying to fetch: ${p}`)
       const resp = await fetch(url, { headers: hdrs })
+      console.log(`Response for ${p}: ${resp.status} ${resp.statusText}`)
       if (!resp.ok) continue
       const text = await resp.text()
       if (text && text.length > 0) {
+        console.log(`Successfully fetched ${p} (${text.length} chars)`)
         results.push({ path: p, content: text })
+      } else {
+        console.log(`Empty content for ${p}`)
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.log(`Error fetching ${p}:`, error)
     }
   }
+  console.log(`Total manifests found: ${results.length}`)
   return results
 }
 
