@@ -21,7 +21,7 @@ import { Repository, ScanRequest } from '../types'
 const ScanRepository: React.FC = () => {
   const navigate = useNavigate()
   const [selectedRepo, setSelectedRepo] = useState<string>('')
-  const [scanType, setScanType] = useState<'full' | 'dependencies' | 'quick'>('full')
+  // Simplified: remove scan type selection
   const [customRepoUrl, setCustomRepoUrl] = useState('')
   const [isCustomRepo, setIsCustomRepo] = useState(false)
 
@@ -60,8 +60,7 @@ const ScanRepository: React.FC = () => {
     try {
       const scanRequest: ScanRequest = {
         repoUrl,
-        scanType,
-        branch: 'main' // Default branch
+        branch: 'main'
       }
       
       await scanMutation.mutateAsync(scanRequest)
@@ -193,42 +192,7 @@ const ScanRepository: React.FC = () => {
                   )}
                 </div>
 
-                {/* Scan Type Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Scan Type
-                  </label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {(['full', 'dependencies', 'quick'] as const).map((type) => (
-                      <button
-                        key={type}
-                        type="button"
-                        onClick={() => setScanType(type)}
-                        className={cn(
-                          "p-4 rounded-lg border text-left transition-all duration-200",
-                          scanType === type
-                            ? "border-primary-500 bg-primary-50 ring-2 ring-primary-200"
-                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                        )}
-                      >
-                        <div className="flex items-center space-x-3 mb-2">
-                          <div className={cn(
-                            "p-2 rounded-lg",
-                            scanType === type ? "bg-primary-100" : "bg-gray-100"
-                          )}>
-                            {getScanTypeIcon(type)}
-                          </div>
-                          <span className="font-medium text-gray-900 capitalize">
-                            {type} Scan
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          {getScanTypeDescription(type)}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                {/* Removed scan type selection for simplified UX */}
 
                 {/* Submit Button */}
                 <div className="pt-4">
@@ -260,43 +224,7 @@ const ScanRepository: React.FC = () => {
 
         {/* Scan Information */}
         <div className="space-y-6">
-          {/* Scan Types Info */}
-          <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-            <div className="card-header">
-              <h3 className="text-lg font-medium text-gray-900">Scan Types</h3>
-            </div>
-            <div className="card-body space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    <Shield className="h-5 w-5 text-primary-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Full Scan</p>
-                    <p className="text-xs text-gray-500">Complete security analysis</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    <Download className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Dependencies</p>
-                    <p className="text-xs text-gray-500">Package vulnerability check</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    <Zap className="h-5 w-5 text-yellow-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Quick Scan</p>
-                    <p className="text-xs text-gray-500">Critical issues only</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+          {/* Removed detailed scan types info */}
 
           {/* What Gets Scanned */}
           <motion.div className="card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.03 }}>
@@ -349,8 +277,7 @@ const ScanRepository: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-900">Estimated Time</p>
                   <p className="text-xs text-gray-500">
-                    {scanType === 'quick' ? '2-5 minutes' : 
-                     scanType === 'dependencies' ? '5-10 minutes' : '10-20 minutes'}
+                    Typical scan completes within 5-15 minutes depending on repository size
                   </p>
                 </div>
               </div>
