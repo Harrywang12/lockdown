@@ -500,69 +500,33 @@ async function analyzeCodePatterns(
   const vulnerabilities: Vulnerability[] = []
   
   try {
-    // Fetch repository files and analyze them for security issues
-    // For now, we'll simulate fetching some key files that might contain API vulnerabilities
-    const fileContents: Record<string, string> = {
-      // Config files that might contain API keys
-      'config/api.js': `const API_CONFIG = {
-  apiKey: "ak_live_abcdefghijklmnopqrstuvwxyz123456",
-  endpoint: "https://api.example.com/v1",
-  timeout: 30000,
-  corsAllowAll: true,
-  rateLimit: false
-}`,
-      'src/services/authService.js': `function authenticate() {
-  return fetch('https://api.example.com/auth', {
-    headers: {
-      'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    // Fetch repository tree and analyze real files for exposed secrets and insecure configs
+    const headers = { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'LockDown-Scanner' }
+    const treeResp = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees/${branch}?recursive=1`, { headers })
+    if (!treeResp.ok) {
+      console.warn('Failed to fetch repo tree', treeResp.status)
+      return vulnerabilities
     }
-  })
-}`,
-      'src/utils/api.js': `const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "ghp_abcdefghijklmnopqrstuvwxyz123456";
+    const treeData = await treeResp.json()
+    const tree: Array<{ path: string; type: string }> = treeData.tree || []
 
-function fetchData() {
-  // Implementation
-}`,
-      'env/.env.dev': `REACT_APP_API_KEY=sk_test_1234567890abcdefghijklmnopqrstuvwxyz
-API_ENDPOINT=https://api.dev.example.com/v1
-DEBUG=true`
-    };
-    
-    // Process each file with our API security analyzer
-    Object.entries(fileContents).forEach(([filePath, content]) => {
-      const apiIssues = analyzeAPISecurityIssues(content, filePath);
-      vulnerabilities.push(...apiIssues);
-    });
-    
-    // Add other code pattern vulnerabilities
-    if (Math.random() > 0.5) { // Increased chance of finding vulnerabilities
-      vulnerabilities.push({
-        id: generateSecureId(),
-        vulnerability_type: 'code',
-        severity: 'MEDIUM',
-        title: 'Potential SQL injection vulnerability',
-        description: 'User input directly concatenated into SQL query without proper sanitization',
-        affected_component: 'src/database/queries.js',
-        raw_data: { 
-          source: 'code_analysis',
-          pattern: 'sql_injection',
-          line: 42
-        }
-      });
-      
-      vulnerabilities.push({
-        id: generateSecureId(),
-        vulnerability_type: 'code',
-        severity: 'HIGH',
-        title: 'Cross-site scripting (XSS) vulnerability',
-        description: 'User input rendered directly in HTML without proper escaping or sanitization',
-        affected_component: 'src/views/dashboard.js',
-        raw_data: { 
-          source: 'code_analysis',
-          pattern: 'xss',
-          line: 78
-        }
-      });
+    // File extensions of interest
+    const includeExt = ['.js','.jsx','.ts','.tsx','.json','.env','.yml','.yaml','.ini','.config','.properties','.sh','.py','.rb','.php']
+    const interesting = (p: string) => includeExt.some(ext => p.toLowerCase().endsWith(ext))
+    const files = tree.filter(n => n.type === 'blob' && interesting(n.path)).slice(0, 200)
+
+    for (const f of files) {
+      try {
+        const rawResp = await fetch(`https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${branch}/${f.path}`, { headers: { 'User-Agent': 'LockDown-Scanner' } })
+        if (!rawResp.ok) continue
+        const content = await rawResp.text()
+        if (content.length > 200_000) continue // skip very large files
+
+        const issues = analyzeAPISecurityIssues(content, f.path)
+        vulnerabilities.push(...issues)
+      } catch (e) {
+        console.warn('Error analyzing', f.path, e)
+      }
     }
     
   } catch (error) {

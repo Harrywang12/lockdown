@@ -8,37 +8,42 @@
 
 // Patterns for common API keys and tokens
 const API_KEY_PATTERNS = [
-  // Basic API key patterns
-  /(['"])?(api[_-]?key|apikey|api_token|auth[_-]?token|access[_-]?token)(['"])?\s*[:=]\s*(['"])[a-zA-Z0-9_\-\.]{16,45}\4/i,
+  // Basic key names (allow camelCase and quoted/unquoted) with a quoted value
+  /(api[_-]?key|apikey|apiToken|api_token|auth[_-]?token|access[_-]?token|secretKey|apiSecret|secret)(["'])?\s*[:=]\s*['"][A-Za-z0-9_\-\.]{16,}['"]/i,
   
   // Environment variable patterns for keys
-  /(API_KEY|APIKEY|API_SECRET|API_TOKEN|AUTH_TOKEN|ACCESS_TOKEN)\s*=\s*["'][a-zA-Z0-9_\-\.]{16,45}["']/i,
+  /(API_KEY|APIKEY|API_SECRET|API_TOKEN|AUTH_TOKEN|ACCESS_TOKEN)\s*=\s*["'][A-Za-z0-9_\-\.]{16,}["']/i,
   
-  // Common service-specific API keys
-  /(['"])?aws[_-]?(access|secret)[_-]?key(['"])?\s*[:=]\s*(['"])[a-zA-Z0-9\/+]{20,40}\4/i,
-  /(['"])?azure[_-]?(api|access)[_-]?key(['"])?\s*[:=]\s*(['"])[a-zA-Z0-9\/+]{40,100}\4/i,
-  /(['"])?google[_-]?api[_-]?key(['"])?\s*[:=]\s*(['"])[a-zA-Z0-9\-_]{30,40}\4/i,
-  /(['"])?github[_-]?(api|access)[_-]?token(['"])?\s*[:=]\s*(['"])ghp_[a-zA-Z0-9]{36}\4/i,
-  /(['"])?stripe[_-]?(api|secret)[_-]?key(['"])?\s*[:=]\s*(['"])sk_[a-zA-Z0-9]{24,34}\4/i,
-  /(['"])?twilio[_-]?(api|auth)[_-]?token(['"])?\s*[:=]\s*(['"])[a-zA-Z0-9]{32,40}\4/i,
+  // Common service-specific API keys (named)
+  /\b(github(?:Access)?Token|github[_-]?token)\b\s*[:=]\s*['"]ghp_[A-Za-z0-9]{36}['"]/i,
+  /\b(stripe(?:Api|Secret)?Key|stripe[_-]?(api|secret)[_-]?key)\b\s*[:=]\s*['"]sk_[A-Za-z0-9]{24,}['"]/i,
+  /(['"])?aws[_-]?(access|secret)[_-]?key(['"])?.*[:=].*['"][A-Za-z0-9\/+]{20,}['"]/i,
+  /(['"])?azure[_-]?(api|access)[_-]?key(['"])?.*[:=].*['"][A-Za-z0-9\/+]{40,}['"]/i,
+  /(['"])?google[_-]?api[_-]?key(['"])?.*[:=].*['"][A-Za-z0-9\-_]{30,}['"]/i,
+  /(['"])?twilio[_-]?(api|auth)[_-]?token(['"])?.*[:=].*['"][A-Za-z0-9]{32,}['"]/i,
   
   // URL patterns with API keys
-  /https?:\/\/[^\/\s]+\/[^\s]*[?&](api_?key|access_?token|auth_?token)=([a-zA-Z0-9_\-\.]{16,45})/i,
+  /https?:\/\/[^\/\s]+\/[^\s]*[?&](api_?key|access_?token|auth_?token)=([A-Za-z0-9_\-\.]{16,})/i,
   
-  // JWT token pattern
-  /(['"])?jwt[_-]?token(['"])?\s*[:=]\s*(['"])[a-zA-Z0-9\-_\.]{30,500}\4/i,
-  
-  // OAuth token pattern
-  /(['"])?oauth[_-]?token(['"])?\s*[:=]\s*(['"])[a-zA-Z0-9\-_]{30,100}\4/i,
+  // JWT/OAuth in assignment
+  /(['"])?jwt[_-]?token(['"])?\s*[:=]\s*['"][A-Za-z0-9\-_\.]{30,500}['"]/i,
+  /(['"])?oauth[_-]?token(['"])?\s*[:=]\s*['"][A-Za-z0-9\-_]{30,100}['"]/i,
   
   // Database connection strings
-  /(['"])?connection[_-]?string(['"])?\s*[:=]\s*(['"]).*password=.+\4/i,
+  /(['"])?connection[_-]?string(['"])?\s*[:=]\s*(['"]).*password=.+\3/i,
   
   // Bearer token in header definition
-  /(['"])?Authorization(['"])?\s*[:=]\s*(['"])Bearer\s+[a-zA-Z0-9\-_\.]{30,500}\4/i,
+  /(['"])?Authorization(['"])?\s*[:=]\s*['"]Bearer\s+[A-Za-z0-9\-_\.]{30,500}['"]/i,
   
   // Generic secret patterns
-  /(['"])?secret(['"])?\s*[:=]\s*(['"])[a-zA-Z0-9\-_\.]{8,100}\4/i,
+  /(['"])?secret(['"])?\s*[:=]\s*['"][A-Za-z0-9\-_\.]{8,100}['"]/i,
+]
+
+// Value-only patterns (no key name required)
+const VALUE_ONLY_PATTERNS = [
+  /['"]sk_[A-Za-z0-9]{24,}['"]/i,           // Stripe secret-like
+  /['"]ghp_[A-Za-z0-9]{36}['"]/i,           // GitHub PAT
+  /['"]eyJ[A-Za-z0-9\-_\.]{20,}['"]/i,    // JWT-like (starts with base64 header)
 ]
 
 // High entropy string detector thresholds
@@ -97,8 +102,8 @@ export function detectAPIKeys(fileContent: string, filePath: string): Array<{
       return;
     }
     
-    // Check against known API key patterns
-    for (const pattern of API_KEY_PATTERNS) {
+    // Check against both key+value and value-only patterns
+    for (const pattern of [...API_KEY_PATTERNS, ...VALUE_ONLY_PATTERNS]) {
       const match = line.match(pattern);
       if (match) {
         // Extract the actual key value
@@ -114,9 +119,9 @@ export function detectAPIKeys(fileContent: string, filePath: string): Array<{
         let keyType = 'API Key/Token';
         if (match[0].toLowerCase().includes('aws')) keyType = 'AWS Key';
         else if (match[0].toLowerCase().includes('google')) keyType = 'Google API Key';
-        else if (match[0].toLowerCase().includes('github')) keyType = 'GitHub Token';
-        else if (match[0].toLowerCase().includes('stripe')) keyType = 'Stripe Key';
-        else if (match[0].toLowerCase().includes('jwt')) keyType = 'JWT Token';
+        else if (match[0].toLowerCase().includes('github') || /ghp_/.test(match[0])) keyType = 'GitHub Token';
+        else if (match[0].toLowerCase().includes('stripe') || /sk_/.test(match[0])) keyType = 'Stripe Key';
+        else if (match[0].toLowerCase().includes('jwt') || /eyJ/.test(match[0])) keyType = 'JWT Token';
         else if (match[0].toLowerCase().includes('oauth')) keyType = 'OAuth Token';
         else if (match[0].toLowerCase().includes('bearer')) keyType = 'Bearer Token';
         
@@ -237,27 +242,27 @@ export function detectInsecureAPIConfigs(fileContent: string): Array<{
   // Patterns for insecure API configurations
   const configPatterns = [
     {
-      pattern: /((['"])?(cors|CORS)(['"])?\s*[:=]\s*(['"])\*\5|\*\s*\})/i,
+      pattern: /((['"])?(cors|CORS)(['"])?.*[:=].*(['"])\*\5|\*\s*\})/i,
       issue: 'Overly permissive CORS configuration (*)',
       type: 'Insecure API Config'
     },
     {
-      pattern: /(['"])?(authentication|auth)(['"])?\s*[:=]\s*(['"])?(false|disabled|off|no)(['"])?/i,
+      pattern: /(['"])?(authentication|auth)(['"])?.*[:=].*(['")]?(false|disabled|off|no)(['"])*/i,
       issue: 'Authentication disabled',
       type: 'Insecure API Config'
     },
     {
-      pattern: /(['"])?(ssl|tls)(['"])?\s*[:=]\s*(['"])?(false|disabled|off|no)(['"])?/i,
+      pattern: /(['"])?(ssl|tls)(['"])?.*[:=].*(['")]?(false|disabled|off|no)(['"])*/i,
       issue: 'SSL/TLS disabled',
       type: 'Insecure API Config'
     },
     {
-      pattern: /(['"])?(verify|certificate_verification)(['"])?\s*[:=]\s*(['"])?(false|disabled|off|no)(['"])?/i,
+      pattern: /(['"])?(verify|certificate_verification)(['"])?.*[:=].*(['")]?(false|disabled|off|no)(['"])*/i,
       issue: 'Certificate verification disabled',
       type: 'Insecure API Config'
     },
     {
-      pattern: /(['"])?(rate_?limit)(['"])?\s*[:=]\s*(false|disabled|off|no|0)/i,
+      pattern: /(['"])?(rate_?limit)(['"])?.*[:=].*(false|disabled|off|no|0)/i,
       issue: 'Rate limiting disabled',
       type: 'Insecure API Config'
     },
