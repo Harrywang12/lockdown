@@ -3,6 +3,9 @@
  * Handles GitHub OAuth token validation, user management, and security functions
  */
 
+// Ambient declaration for Deno in TypeScript tooling
+declare const Deno: any
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // Types for authentication and user management

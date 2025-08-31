@@ -17,6 +17,7 @@ import { scanRepository, getGitHubRepositories } from '../services/api'
 import { toast } from 'react-hot-toast'
 import { cn } from '../utils/cn'
 import { Repository, ScanRequest } from '../types'
+import { supabase } from '../hooks/useSupabase'
 
 const ScanRepository: React.FC = () => {
   const navigate = useNavigate()
@@ -58,9 +59,15 @@ const ScanRepository: React.FC = () => {
     const repoUrl = isCustomRepo ? customRepoUrl : selectedRepo
     
     try {
+      // Try to include GitHub provider token so backend can access private repos
+      const { data: { session } } = await supabase.auth.getSession()
+      const githubToken = session?.provider_token
+
       const scanRequest: ScanRequest = {
         repoUrl,
-        branch: 'main'
+        branch: 'main',
+        scanType: 'full',
+        githubToken
       }
       
       await scanMutation.mutateAsync(scanRequest)

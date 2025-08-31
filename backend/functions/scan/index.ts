@@ -16,6 +16,9 @@
  * - Modular vulnerability detection
  */
 
+// Ambient declaration for Deno in TypeScript tooling
+declare const Deno: any
+
 import { 
   verifyAuth, 
   checkRateLimit, 
@@ -34,6 +37,7 @@ interface ScanRequest {
   repoUrl: string
   branch?: string
   scanType?: 'full' | 'dependencies' | 'quick'
+  githubToken?: string
 }
 
 interface Vulnerability {
@@ -160,9 +164,10 @@ Deno.serve(async (request: Request) => {
     // Start scan process
     const scanResult = await performVulnerabilityScan(
       user,
-      repoInfo,
+      { owner: repoInfo.owner, repo: repoInfo.repo, branch: requestBody.branch || 'main' },
       requestBody.branch || 'main',
-      requestBody.scanType || 'full'
+      requestBody.scanType || 'full',
+      requestBody.githubToken
     )
 
     return new Response(
@@ -212,7 +217,8 @@ async function performVulnerabilityScan(
   user: AuthenticatedUser,
   repoInfo: { owner: string; repo: string; branch: string },
   branch: string,
-  scanType: string
+  scanType: string,
+  githubToken?: string
 ): Promise<ScanResult> {
   const scanStartTime = Date.now()
   const scanId = generateSecureId()
@@ -227,7 +233,7 @@ async function performVulnerabilityScan(
     const scanSessionId = await createScanSession(supabase, repositoryId, user.id, scanId)
     
     // Perform vulnerability detection
-    const vulnerabilities = await detectVulnerabilities(repoInfo, branch, scanType)
+    const vulnerabilities = await detectVulnerabilities(repoInfo, branch, scanType, githubToken)
     
     // Calculate security metrics
     const securityMetrics = calculateSecurityMetrics(vulnerabilities)
@@ -363,24 +369,25 @@ async function createScanSession(
 async function detectVulnerabilities(
   repoInfo: { owner: string; repo: string; branch: string },
   branch: string,
-  scanType: string
+  scanType: string,
+  githubToken?: string
 ): Promise<Vulnerability[]> {
   const vulnerabilities: Vulnerability[] = []
   
   try {
     // 1. Dependency vulnerability scanning
     if (scanType === 'full' || scanType === 'dependencies') {
-      const dependencyVulns = await scanDependencies(repoInfo, branch)
+      const dependencyVulns = await scanDependencies(repoInfo, branch, githubToken)
       vulnerabilities.push(...dependencyVulns)
     }
     
-    // 2. Code pattern analysis (basic implementation for MVP)
+    // 2. Code pattern analysis
     if (scanType === 'full') {
-      const codeVulns = await analyzeCodePatterns(repoInfo, branch)
+      const codeVulns = await analyzeCodePatternsWithGitHub(repoInfo, branch, githubToken)
       vulnerabilities.push(...codeVulns)
     }
     
-    // 3. Configuration file analysis
+    // 3. Configuration file analysis (existing simulated checks)
     if (scanType === 'full') {
       const configVulns = await analyzeConfigurationFiles(repoInfo, branch)
       vulnerabilities.push(...configVulns)
@@ -388,7 +395,6 @@ async function detectVulnerabilities(
     
   } catch (error) {
     console.error('Error during vulnerability detection:', error)
-    // Continue with partial results rather than failing completely
   }
   
   return vulnerabilities
@@ -399,7 +405,8 @@ async function detectVulnerabilities(
  */
 async function scanDependencies(
   repoInfo: { owner: string; repo: string; branch: string },
-  branch: string
+  branch: string,
+  githubToken?: string
 ): Promise<Vulnerability[]> {
   const vulnerabilities: Vulnerability[] = []
   
@@ -409,7 +416,7 @@ async function scanDependencies(
     vulnerabilities.push(...snykVulns)
     
     // Fallback to OSV.dev API
-    const osvVulns = await scanWithOSV(repoInfo, branch)
+    const osvVulns = await scanWithOSV(repoInfo, branch, githubToken)
     vulnerabilities.push(...osvVulns)
     
   } catch (error) {
@@ -463,64 +470,313 @@ async function scanWithSnyk(
  */
 async function scanWithOSV(
   repoInfo: { owner: string; repo: string; branch: string },
-  branch: string
+  branch: string,
+  githubToken?: string
 ): Promise<Vulnerability[]> {
   try {
     console.log(`Scanning ${repoInfo.owner}/${repoInfo.repo} with OSV.dev API`)
-    
-    // OSV.dev API call would go here
-    // For MVP, we'll simulate the response
-    return [
-      {
-        id: generateSecureId(),
-        vulnerability_type: 'dependency',
-        severity: 'MEDIUM',
-        title: 'Known vulnerability in dependency',
-        description: 'Package axios@0.21.1 has a known vulnerability',
-        affected_component: 'axios',
-        affected_version: '0.21.1',
-        fixed_version: '0.21.2',
-        raw_data: { source: 'osv', package: 'axios' }
+
+    // 1) Fetch dependency manifests from GitHub
+    const manifests = await fetchDependencyManifests(repoInfo, branch, githubToken)
+    if (manifests.length === 0) {
+      console.log('No supported dependency manifests found. Skipping OSV scan.')
+      return []
+    }
+
+    // 2) Parse manifests into package queries for OSV
+    const queries = buildOSVQueriesFromManifests(manifests)
+    if (queries.length === 0) {
+      console.log('No dependency queries constructed for OSV. Skipping.')
+      return []
+    }
+
+    // 3) Call OSV batch API
+    const osvResp = await fetch('https://api.osv.dev/v1/querybatch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ queries })
+    })
+    if (!osvResp.ok) {
+      console.error('OSV.dev API error status:', osvResp.status, await safeReadText(osvResp))
+      return []
+    }
+    const osvData = await osvResp.json()
+    const results = Array.isArray(osvData.results) ? osvData.results : []
+
+    // 4) Convert OSV results to our Vulnerability model
+    const vulnerabilities: Vulnerability[] = []
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i]
+      if (!result || !Array.isArray(result.vulns)) continue
+
+      const query = queries[i]
+      const pkgName = query?.package?.name || 'unknown'
+      const pkgVersion = query?.version
+
+      for (const v of result.vulns) {
+        const title = v.summary || v.id || `Vulnerability in ${pkgName}`
+        const description = v.details || title
+        const aliases: string[] = Array.isArray(v.aliases) ? v.aliases : []
+        const cve = aliases.find((a: string) => typeof a === 'string' && a.startsWith('CVE-'))
+
+        const severityScore = extractCvssScore(v)
+        const severity = mapCvssScoreToSeverity(severityScore)
+
+        vulnerabilities.push({
+          id: generateSecureId(),
+          cve_id: cve,
+          vulnerability_type: 'dependency',
+          severity,
+          title,
+          description,
+          affected_component: pkgName,
+          affected_version: pkgVersion,
+          references: Array.isArray(v.references) ? v.references.map((r: any) => r.url).filter(Boolean) : undefined,
+          cvss_score: severityScore || undefined,
+          raw_data: { source: 'osv', id: v.id, aliases: v.aliases, database_specific: v.database_specific }
+        })
       }
-    ]
-    
+    }
+
+    return vulnerabilities
   } catch (error) {
     console.error('OSV.dev API error:', error)
     return []
   }
 }
 
-/**
- * Analyze code patterns for common security issues
- */
-async function analyzeCodePatterns(
+// Utility: Safely read response text (avoid throwing on body used)
+async function safeReadText(resp: Response): Promise<string> {
+  try { return await resp.text() } catch { return '' }
+}
+
+// Fetch supported dependency manifests from GitHub
+async function fetchDependencyManifests(
   repoInfo: { owner: string; repo: string; branch: string },
-  branch: string
+  branch: string,
+  githubToken?: string
+): Promise<Array<{ path: string; content: string }>> {
+  const hdrs: Record<string,string> = { 'User-Agent': 'LockDown-Scanner' }
+  if (githubToken) hdrs['Authorization'] = `token ${githubToken}`
+
+  const candidatePaths = [
+    'package-lock.json',
+    'yarn.lock',
+    'pnpm-lock.yaml',
+    'package.json',
+    'requirements.txt',
+    'poetry.lock',
+    'Pipfile.lock',
+    'go.mod',
+    'Cargo.lock',
+    'pom.xml'
+  ]
+
+  const results: Array<{ path: string; content: string }> = []
+  for (const p of candidatePaths) {
+    try {
+      const url = `https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${branch}/${p}`
+      const resp = await fetch(url, { headers: hdrs })
+      if (!resp.ok) continue
+      const text = await resp.text()
+      if (text && text.length > 0) {
+        results.push({ path: p, content: text })
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return results
+}
+
+// Build OSV queries from a set of manifests
+function buildOSVQueriesFromManifests(manifests: Array<{ path: string; content: string }>): Array<{ package: { name: string; ecosystem: string }, version?: string }>{
+  const queries: Array<{ package: { name: string; ecosystem: string }, version?: string }> = []
+  const seen = new Set<string>()
+
+  // Prefer lockfiles for exact versions; fall back to manifest where needed
+  for (const m of manifests) {
+    if (m.path === 'package-lock.json') addAll(parseNpmLock(m.content, 'npm'))
+    else if (m.path === 'pnpm-lock.yaml') addAll(parsePnpmLock(m.content))
+    else if (m.path === 'yarn.lock') addAll(parseYarnLock(m.content))
+  }
+  for (const m of manifests) {
+    if (m.path === 'package.json') addAll(parsePackageJson(m.content, 'npm'))
+    else if (m.path === 'requirements.txt') addAll(parseRequirementsTxt(m.content))
+    else if (m.path === 'go.mod') addAll(parseGoMod(m.content))
+    // Additional ecosystems can be added here (Cargo, Maven, etc.)
+  }
+
+  function addAll(items: Array<{ name: string; ecosystem: string; version?: string }>) {
+    for (const it of items) {
+      const key = `${it.ecosystem}:${it.name}@${it.version || '*'}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      queries.push({ package: { name: it.name, ecosystem: it.ecosystem }, version: it.version })
+    }
+  }
+
+  return queries
+}
+
+// Parsers for ecosystems
+function parsePackageJson(jsonText: string, ecosystem: string): Array<{ name: string; ecosystem: string; version?: string }>{
+  try {
+    const data = JSON.parse(jsonText)
+    const out: Array<{ name: string; ecosystem: string; version?: string }> = []
+    const addFrom = (obj: Record<string,string> | undefined) => {
+      if (!obj) return
+      for (const [name, ver] of Object.entries(obj)) {
+        out.push({ name, ecosystem, version: normalizeNpmVersion(ver) })
+      }
+    }
+    addFrom(data.dependencies)
+    addFrom(data.devDependencies)
+    addFrom(data.optionalDependencies)
+    return out
+  } catch {
+    return []
+  }
+}
+
+function parseNpmLock(jsonText: string, ecosystem: string): Array<{ name: string; ecosystem: string; version?: string }>{
+  try {
+    const data = JSON.parse(jsonText)
+    const out: Array<{ name: string; ecosystem: string; version?: string }> = []
+    if (data.dependencies && typeof data.dependencies === 'object') {
+      for (const [name, meta] of Object.entries<any>(data.dependencies)) {
+        const version = typeof meta === 'object' && meta && meta.version ? String(meta.version) : undefined
+        out.push({ name, ecosystem, version })
+      }
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+// Minimal PNPM/Yarn parsers (versions may be best-effort)
+function parsePnpmLock(text: string): Array<{ name: string; ecosystem: string; version?: string }>{
+  // Heuristic: extract lines like '/name/1.2.3:' -> name@1.2.3
+  const out: Array<{ name: string; ecosystem: string; version?: string }> = []
+  const re = /^\s*\/([^\/@]+)\/(\d+[^:]*):/gm
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    out.push({ name: m[1], ecosystem: 'npm', version: m[2] })
+  }
+  return out
+}
+
+function parseYarnLock(text: string): Array<{ name: string; ecosystem: string; version?: string }>{
+  const out: Array<{ name: string; ecosystem: string; version?: string }> = []
+  const re = /^"?([^@\s"]+)@[^\n]+\n\s+version\s+"([^"]+)"/gm
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const name = m[1].includes('@') ? m[1] : m[1]
+    out.push({ name, ecosystem: 'npm', version: m[2] })
+  }
+  return out
+}
+
+function parseRequirementsTxt(text: string): Array<{ name: string; ecosystem: string; version?: string }>{
+  const out: Array<{ name: string; ecosystem: string; version?: string }> = []
+  const lines = text.split('\n')
+  for (const line of lines) {
+    const t = line.trim()
+    if (!t || t.startsWith('#') || t.startsWith('-r ')) continue
+    const eq = t.indexOf('==')
+    if (eq > 0) {
+      const name = t.slice(0, eq).trim()
+      const version = t.slice(eq + 2).trim()
+      if (name) out.push({ name, ecosystem: 'PyPI', version })
+    } else {
+      // No pinned version
+      out.push({ name: t, ecosystem: 'PyPI' })
+    }
+  }
+  return out
+}
+
+function parseGoMod(text: string): Array<{ name: string; ecosystem: string; version?: string }>{
+  const out: Array<{ name: string; ecosystem: string; version?: string }> = []
+  const lines = text.split('\n')
+  let inRequireBlock = false
+  for (const line of lines) {
+    const t = line.trim()
+    if (t.startsWith('require (')) { inRequireBlock = true; continue }
+    if (inRequireBlock && t.startsWith(')')) { inRequireBlock = false; continue }
+    if (t.startsWith('require ')) {
+      const parts = t.replace(/^require\s+/, '').split(/\s+/)
+      if (parts[0]) out.push({ name: parts[0], ecosystem: 'Go', version: parts[1] })
+    } else if (inRequireBlock && t && !t.startsWith('//')) {
+      const parts = t.split(/\s+/)
+      if (parts[0]) out.push({ name: parts[0], ecosystem: 'Go', version: parts[1] })
+    }
+  }
+  return out
+}
+
+function normalizeNpmVersion(v: string | undefined): string | undefined {
+  if (!v) return v
+  // Remove common range specifiers ^ ~ >= <= etc., prefer bare version if present
+  const m = v.match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z-.]+)?/)
+  return m ? m[0] : undefined
+}
+
+function extractCvssScore(vuln: any): number | null {
+  try {
+    if (Array.isArray(vuln.severity)) {
+      for (const s of vuln.severity) {
+        if (s.type && String(s.type).toUpperCase().includes('CVSS')) {
+          const score = s.score ? Number(s.score) : undefined
+          if (!Number.isNaN(score) && score !== undefined) return score
+        }
+      }
+    }
+    if (vuln.database_specific && typeof vuln.database_specific.cvss_score === 'number') {
+      return vuln.database_specific.cvss_score
+    }
+  } catch {}
+  return null
+}
+
+function mapCvssScoreToSeverity(score: number | null): 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' {
+  if (score === null) return 'MEDIUM'
+  if (score >= 9.0) return 'CRITICAL'
+  if (score >= 7.0) return 'HIGH'
+  if (score >= 4.0) return 'MEDIUM'
+  return 'LOW'
+}
+
+async function analyzeCodePatternsWithGitHub(
+  repoInfo: { owner: string; repo: string; branch: string },
+  branch: string,
+  githubToken?: string
 ): Promise<Vulnerability[]> {
   const vulnerabilities: Vulnerability[] = []
-  
+  const hdrs: Record<string,string> = { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'LockDown-Scanner' }
+  if (githubToken) hdrs['Authorization'] = `token ${githubToken}`
+
   try {
-    // Fetch repository tree and analyze real files for exposed secrets and insecure configs
-    const headers = { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'LockDown-Scanner' }
-    const treeResp = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees/${branch}?recursive=1`, { headers })
-    if (!treeResp.ok) {
-      console.warn('Failed to fetch repo tree', treeResp.status)
-      return vulnerabilities
-    }
+    const treeResp = await fetch(`https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/git/trees/${branch}?recursive=1`, { headers: hdrs })
+    if (!treeResp.ok) return vulnerabilities
     const treeData = await treeResp.json()
     const tree: Array<{ path: string; type: string }> = treeData.tree || []
 
-    // File extensions of interest
     const includeExt = ['.js','.jsx','.ts','.tsx','.json','.env','.yml','.yaml','.ini','.config','.properties','.sh','.py','.rb','.php']
     const interesting = (p: string) => includeExt.some(ext => p.toLowerCase().endsWith(ext))
     const files = tree.filter(n => n.type === 'blob' && interesting(n.path)).slice(0, 200)
 
     for (const f of files) {
       try {
-        const rawResp = await fetch(`https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${branch}/${f.path}`, { headers: { 'User-Agent': 'LockDown-Scanner' } })
+        const rawHdrs: Record<string,string> = { 'User-Agent': 'LockDown-Scanner' }
+        if (githubToken) rawHdrs['Authorization'] = `token ${githubToken}`
+        const rawResp = await fetch(`https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${branch}/${f.path}`, { headers: rawHdrs })
         if (!rawResp.ok) continue
         const content = await rawResp.text()
-        if (content.length > 200_000) continue // skip very large files
+        if (content.length > 200_000) continue
 
         const issues = analyzeAPISecurityIssues(content, f.path)
         vulnerabilities.push(...issues)
@@ -528,12 +784,11 @@ async function analyzeCodePatterns(
         console.warn('Error analyzing', f.path, e)
       }
     }
-    
-  } catch (error) {
-    console.error('Code pattern analysis failed:', error);
+  } catch (e) {
+    console.warn('analyzeCodePatternsWithGitHub error', e)
   }
-  
-  return vulnerabilities;
+
+  return vulnerabilities
 }
 
 /**

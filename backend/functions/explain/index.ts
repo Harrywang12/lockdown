@@ -16,6 +16,9 @@
  * - Security-conscious input validation
  */
 
+// Ambient declaration for Deno in TypeScript tooling
+declare const Deno: any
+
 import { 
   verifyAuth, 
   checkRateLimit, 

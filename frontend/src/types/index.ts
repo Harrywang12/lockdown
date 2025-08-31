@@ -134,6 +134,7 @@ export interface ScanRequest {
   repoUrl: string
   branch?: string
   scanType?: 'full' | 'dependencies' | 'quick'
+  githubToken?: string
 }
 
 export interface ScanResponse {
