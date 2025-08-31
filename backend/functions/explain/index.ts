@@ -1,5 +1,5 @@
 /**
- * LockDown AI Vulnerability Explanation Service
+ * LockDown AI Vulnerability Explanation Service (Enhanced)
  * 
  * This Edge Function provides AI-powered explanations of security vulnerabilities by:
  * 1. Receiving vulnerability data from the frontend
@@ -222,11 +222,25 @@ Deno.serve(async (request: Request) => {
       ghsaId: requestBody.vulnerability.ghsa_id
     })
 
+    // Fetch GHSA details if a GHSA ID is provided
+    let ghsaDetails = null
+    if (requestBody.vulnerability.ghsa_id && requestBody.vulnerability.ghsa_id.startsWith('GHSA-')) {
+      try {
+        console.log(`Fetching GHSA details for ${requestBody.vulnerability.ghsa_id}`)
+        ghsaDetails = await fetchGHSADetails(requestBody.vulnerability.ghsa_id)
+        console.log('GHSA details fetched successfully')
+      } catch (error) {
+        console.error('Failed to fetch GHSA details:', error)
+        // Continue without GHSA details
+      }
+    }
+
     // Generate AI explanation
     const explanationResult = await generateAIExplanation(
       requestBody.vulnerability, 
       requestBody.context,
-      requestBody.options
+      requestBody.options,
+      ghsaDetails
     )
 
     if (!explanationResult.success) {
@@ -277,12 +291,55 @@ Deno.serve(async (request: Request) => {
 })
 
 /**
+ * Fetch GHSA details from GitHub API
+ */
+async function fetchGHSADetails(ghsaId: string): Promise<any> {
+  try {
+    const response = await fetch(`https://api.github.com/advisories/${ghsaId}`, {
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'LockDown-Security-Scanner'
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    return {
+      summary: data.summary,
+      description: data.description,
+      severity: data.severity,
+      cvss_score: data.cvss?.score,
+      cvss_vector: data.cvss?.vector_string,
+      published_at: data.published_at,
+      updated_at: data.updated_at,
+      references: data.references?.map((ref: any) => ref.url) || [],
+      affected_packages: data.affected?.map((pkg: any) => ({
+        name: pkg.package.name,
+        ecosystem: pkg.package.ecosystem,
+        affected_versions: pkg.ranges?.map((r: any) => r.description).join(', ') || 'Unknown',
+        patched_versions: pkg.ranges?.[0]?.fixed_version
+      })) || [],
+      cve_ids: data.cve_ids || [],
+      vulnerable_functions: data.vulnerable_functions || [],
+      patched_versions: data.patched_versions || []
+    }
+  } catch (error) {
+    console.error('Error fetching GHSA details:', error)
+    throw error
+  }
+}
+
+/**
  * Generate AI explanation using Google Gemini API
  */
 async function generateAIExplanation(
   vulnerability: ExplanationRequest['vulnerability'],
   context?: ExplanationRequest['context'],
-  options?: ExplanationRequest['options']
+  options?: ExplanationRequest['options'],
+  ghsaDetails?: any
 ): Promise<ExplanationResponse> {
   
   if (!GEMINI_API_KEY) {
@@ -312,6 +369,26 @@ async function generateAIExplanation(
       }
     }
 
+    // Format GHSA details for the prompt
+    let ghsaDetailsText = 'Not available'
+    if (ghsaDetails) {
+      ghsaDetailsText = `
+Summary: ${ghsaDetails.summary || 'Not provided'}
+Description: ${ghsaDetails.description || 'Not provided'}
+Severity: ${ghsaDetails.severity || 'Not provided'}
+CVSS Score: ${ghsaDetails.cvss_score || 'Not provided'}
+CVSS Vector: ${ghsaDetails.cvss_vector || 'Not provided'}
+Published: ${ghsaDetails.published_at || 'Not provided'}
+Updated: ${ghsaDetails.updated_at || 'Not provided'}
+CVE IDs: ${ghsaDetails.cve_ids?.join(', ') || 'None'}
+References: ${ghsaDetails.references?.join(', ') || 'None'}
+Affected Packages: ${ghsaDetails.affected_packages?.map((pkg: any) => 
+  `${pkg.name} (${pkg.ecosystem}): ${pkg.affected_versions} -> ${pkg.patched_versions || 'No patch available'}`
+).join('; ') || 'None'}
+Vulnerable Functions: ${ghsaDetails.vulnerable_functions?.join(', ') || 'None'}
+Patched Versions: ${ghsaDetails.patched_versions?.join(', ') || 'None'}`
+    }
+
     // Prepare the prompt with vulnerability details
     const prompt = VULNERABILITY_PROMPT_TEMPLATE
       .replace('{title}', vulnerability.title)
@@ -322,6 +399,7 @@ async function generateAIExplanation(
       .replace('{cve_id}', vulnerability.cve_id || 'Not specified')
       .replace('{ghsa_id}', vulnerability.ghsa_id || 'Not specified')
       .replace('{cvss_score}', vulnerability.cvss_score?.toString() || 'Not specified')
+      .replace('{ghsa_details}', ghsaDetailsText)
       .replace('{repository}', context?.repository || 'Not specified')
       .replace('{language}', context?.language || 'Not specified')
 

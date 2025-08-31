@@ -53,6 +53,8 @@ export interface AIExplanation {
   suggested_fix: string
   risk_assessment?: string
   mitigation_steps: string[]
+  detection_methods?: string
+  security_best_practices?: string
   ai_model: string
   confidence_score: number
   tokens_used: number

@@ -68,18 +68,49 @@ interface ExplanationResponse {
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
 
-// Security-focused prompt template for vulnerability explanation
-const VULNERABILITY_PROMPT_TEMPLATE = `You are a cybersecurity expert specializing in software vulnerability analysis and remediation. 
+// Enhanced security-focused prompt template for improved vulnerability explanation
+const VULNERABILITY_PROMPT_TEMPLATE = `You are a highly experienced cybersecurity expert specializing in software vulnerability analysis, remediation, and security architecture. Your task is to provide a comprehensive analysis of the security vulnerability described below.
 
-Please analyze the following security vulnerability and provide:
+IMPORTANT: You are analyzing a real security vulnerability. Provide specific, actionable, and accurate information. Do not give generic responses. If you have detailed information about the vulnerability, use it to provide concrete guidance.
 
-1. **Clear Explanation**: Explain what this vulnerability is, how it works, and why it's dangerous in simple terms that a student developer can understand.
+Please analyze the following security vulnerability and provide a detailed, actionable response with:
 
-2. **Suggested Fix**: Provide specific, actionable code examples or configuration changes to fix this vulnerability.
+1. **Clear Explanation**: Explain what this vulnerability is, how it works, and why it's dangerous. Be specific about:
+   - The exact mechanism of the vulnerability
+   - How attackers could exploit it
+   - What systems or data could be compromised
+   - Real-world examples if available
 
-3. **Risk Assessment**: Explain the potential impact and risk level of this vulnerability.
+2. **Suggested Fix**: Provide specific, actionable code examples or configuration changes to fix this vulnerability. Include:
+   - Exact code changes needed
+   - Version updates required
+   - Configuration modifications
+   - Before/after examples with comments
 
-4. **Mitigation Steps**: List 3-5 specific steps to address this vulnerability, including any immediate actions needed.
+3. **Risk Assessment**: Provide a detailed risk analysis including:
+   - Specific attack scenarios and their likelihood
+   - Potential data exposure or system compromise
+   - Business impact (data loss, service disruption, compliance issues)
+   - Whether this could be part of a larger attack chain
+   - Exploitation complexity and prerequisites
+
+4. **Mitigation Steps**: List 5-7 specific, prioritized steps:
+   - Immediate actions (within 24 hours)
+   - Short-term fixes (within a week)
+   - Long-term preventive measures
+   - Monitoring and detection steps
+
+5. **Detection Methods**: Explain how to:
+   - Identify if this vulnerability exists in your codebase
+   - Detect if it has been exploited
+   - Monitor for future exploitation attempts
+   - Set up automated scanning and alerts
+
+6. **Security Best Practices**: Provide specific best practices to prevent similar vulnerabilities, including:
+   - Code review guidelines
+   - Testing strategies
+   - Dependency management practices
+   - Security scanning tools and configurations
 
 **Vulnerability Details:**
 - Title: {title}
@@ -91,20 +122,32 @@ Please analyze the following security vulnerability and provide:
 - GHSA ID: {ghsa_id || 'Not specified'}
 - CVSS Score: {cvss_score || 'Not specified'}
 
+**GHSA Details (if available):**
+{ghsa_details}
+
 **Context:**
 - Repository: {repository || 'Not specified'}
 - Language/Framework: {language || 'Not specified'}
 
+SPECIAL INSTRUCTIONS:
+- If this is a GHSA vulnerability, use the detailed GHSA information to provide specific guidance about affected versions, patched versions, and exact remediation steps.
+- If this is a dependency vulnerability, provide exact version numbers and update commands.
+- If this is a code vulnerability, provide specific code examples and patterns to avoid.
+- If this is a configuration issue, provide exact configuration changes needed.
+- Always prioritize actionable, specific advice over generic statements.
+
 Please format your response as JSON with the following structure:
 {
-  "explanation": "Clear explanation of the vulnerability",
-  "suggestedFix": "Specific fix with code examples",
-  "riskAssessment": "Risk level and potential impact",
-  "mitigationSteps": ["Step 1", "Step 2", "Step 3"],
+    "explanation": "Detailed explanation of the vulnerability with specific attack vectors and mechanisms",
+  "suggestedFix": "Specific fix with exact code examples, version updates, or configuration changes",
+  "riskAssessment": "Comprehensive risk analysis with specific attack scenarios and business impact",
+  "mitigationSteps": ["Immediate action 1", "Short-term fix 2", "Long-term measure 3", "Monitoring step 4", "Prevention step 5"],
+  "detectionMethods": "Specific ways to detect this vulnerability and monitor for exploitation",
+  "securityBestPractices": "Specific best practices to prevent similar vulnerabilities",
   "confidenceScore": 0.95
 }
 
-Focus on practical, actionable advice that helps developers understand and fix the issue quickly.`
+Provide the most thorough, accurate, and actionable guidance possible. Be specific and avoid generic statements.`
 
 /**
  * Main handler for the explain endpoint
@@ -197,6 +240,20 @@ Deno.serve(async (request: Request) => {
       ghsaId: ghsaFromRaw
     })
 
+    // Fetch GHSA details if a GHSA ID is provided
+    let ghsaDetails = null
+    const ghsaId = ghsaFromRaw || vulnerabilityRecord.ghsa_id
+    if (ghsaId && ghsaId.startsWith('GHSA-')) {
+      try {
+        console.log(`Fetching GHSA details for ${ghsaId}`)
+        ghsaDetails = await fetchGHSADetails(ghsaId)
+        console.log('GHSA details fetched successfully')
+      } catch (error) {
+        console.error('Failed to fetch GHSA details:', error)
+        // Continue without GHSA details
+      }
+    }
+
     // Generate AI explanation
     const explanationResult = await generateAIExplanation(
       {
@@ -212,7 +269,8 @@ Deno.serve(async (request: Request) => {
         cvss_score: vulnerabilityRecord.cvss_score
       },
       requestBody.context,
-      requestBody.vulnerabilityId || undefined
+      requestBody.vulnerabilityId || undefined,
+      ghsaDetails
     )
 
     if (!explanationResult.success) {
@@ -281,12 +339,55 @@ Deno.serve(async (request: Request) => {
 })
 
 /**
+ * Fetch GHSA details from GitHub API
+ */
+async function fetchGHSADetails(ghsaId: string): Promise<any> {
+  try {
+    const response = await fetch(`https://api.github.com/advisories/${ghsaId}`, {
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'LockDown-Security-Scanner'
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    return {
+      summary: data.summary,
+      description: data.description,
+      severity: data.severity,
+      cvss_score: data.cvss?.score,
+      cvss_vector: data.cvss?.vector_string,
+      published_at: data.published_at,
+      updated_at: data.updated_at,
+      references: data.references?.map((ref: any) => ref.url) || [],
+      affected_packages: data.affected?.map((pkg: any) => ({
+        name: pkg.package.name,
+        ecosystem: pkg.package.ecosystem,
+        affected_versions: pkg.ranges?.map((r: any) => r.description).join(', ') || 'Unknown',
+        patched_versions: pkg.ranges?.[0]?.fixed_version
+      })) || [],
+      cve_ids: data.cve_ids || [],
+      vulnerable_functions: data.vulnerable_functions || [],
+      patched_versions: data.patched_versions || []
+    }
+  } catch (error) {
+    console.error('Error fetching GHSA details:', error)
+    throw error
+  }
+}
+
+/**
  * Generate AI explanation using Google Gemini API
  */
 async function generateAIExplanation(
   vulnerability: NonNullable<ExplanationRequest['vulnerability']>,
   context?: ExplanationRequest['context'],
-  vulnerabilityIdForCache?: string
+  vulnerabilityIdForCache?: string,
+  ghsaDetails?: any
 ): Promise<ExplanationResponse> {
   
   if (!GEMINI_API_KEY) {
@@ -328,6 +429,26 @@ async function generateAIExplanation(
       }
     }
 
+    // Format GHSA details for the prompt
+    let ghsaDetailsText = 'Not available'
+    if (ghsaDetails) {
+      ghsaDetailsText = `
+Summary: ${ghsaDetails.summary || 'Not provided'}
+Description: ${ghsaDetails.description || 'Not provided'}
+Severity: ${ghsaDetails.severity || 'Not provided'}
+CVSS Score: ${ghsaDetails.cvss_score || 'Not provided'}
+CVSS Vector: ${ghsaDetails.cvss_vector || 'Not provided'}
+Published: ${ghsaDetails.published_at || 'Not provided'}
+Updated: ${ghsaDetails.updated_at || 'Not provided'}
+CVE IDs: ${ghsaDetails.cve_ids?.join(', ') || 'None'}
+References: ${ghsaDetails.references?.join(', ') || 'None'}
+Affected Packages: ${ghsaDetails.affected_packages?.map((pkg: any) => 
+  `${pkg.name} (${pkg.ecosystem}): ${pkg.affected_versions} -> ${pkg.patched_versions || 'No patch available'}`
+).join('; ') || 'None'}
+Vulnerable Functions: ${ghsaDetails.vulnerable_functions?.join(', ') || 'None'}
+Patched Versions: ${ghsaDetails.patched_versions?.join(', ') || 'None'}`
+    }
+
     // Prepare the prompt with vulnerability details
     const prompt = VULNERABILITY_PROMPT_TEMPLATE
       .replace('{title}', vulnerability.title)
@@ -338,6 +459,7 @@ async function generateAIExplanation(
       .replace('{cve_id}', vulnerability.cve_id || 'Not specified')
       .replace('{ghsa_id}', vulnerability.ghsa_id || 'Not specified')
       .replace('{cvss_score}', vulnerability.cvss_score?.toString() || 'Not specified')
+      .replace('{ghsa_details}', ghsaDetailsText)
       .replace('{repository}', context?.repository || 'Not specified')
       .replace('{language}', context?.language || 'Not specified')
 
